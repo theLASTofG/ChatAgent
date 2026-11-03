@@ -1,0 +1,29 @@
+{
+  "name": "projeto-ia-respostas",
+  "version": "1.0.0",
+  "description": "IA de Respostas Open-Source (Groq API) com foco em custo zero e escala para Android (PWA / Capacitor)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node test-smoke.js"
+  },
+  "keywords": [
+    "ai",
+    "groq",
+    "open-source",
+    "llama",
+    "android",
+    "pwa",
+    "capacitor"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

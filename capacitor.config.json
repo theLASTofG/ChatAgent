@@ -1,0 +1,8 @@
+{
+  "appId": "com.projetoia.respostas",
+  "appName": "IA Respostas",
+  "webDir": "public",
+  "server": {
+    "androidScheme": "https"
+  }
+}

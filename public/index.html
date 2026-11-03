@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark" data-font="sans" data-accent="neutral">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+  <meta name="theme-color" content="#0d0d0d" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src *; object-src 'none'; base-uri 'none'; form-action 'none'" />
+  <title>IA de Respostas</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="/theme-boot.js"></script>
+</head>
+<body>
+  <div class="layout" id="layout">
+    <!-- Barra lateral de conversas -->
+    <aside id="drawer" class="sidebar" aria-label="Conversas">
+      <div class="sidebar-top">
+        <button id="collapseBtn" class="icon-btn" title="Fechar barra lateral" aria-label="Fechar barra lateral">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg>
+        </button>
+        <button id="newChatBtn" class="icon-btn" title="Nova conversa" aria-label="Nova conversa">
+          <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        </button>
+      </div>
+      <label class="search">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="threadSearch" type="search" placeholder="Buscar conversas" />
+      </label>
+      <div class="sidebar-label">Recentes</div>
+      <ul id="threadList" class="thread-list"></ul>
+      <div class="sidebar-foot">
+        <button id="openSettingsBtn" class="sidebar-row">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+          <span>Configurações</span>
+        </button>
+      </div>
+    </aside>
+    <div id="drawerBackdrop" class="scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button id="menuBtn" class="icon-btn" title="Abrir barra lateral" aria-label="Abrir barra lateral">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg>
+        </button>
+        <div class="persona-menu">
+          <button id="personaBtn" class="persona-trigger" aria-haspopup="listbox" aria-expanded="false">
+            <span id="personaName">Assistente Geral</span>
+            <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div id="personaBar" class="popover" role="listbox" hidden></div>
+        </div>
+        <div class="topbar-right">
+          <span id="apiStatusDot" class="status-dot" title="Status"></span>
+          <span id="apiStatusText" class="status-text">Conectando</span>
+          <button id="langBtn" class="chip-btn" title="Idioma da resposta e da voz" aria-label="Idioma da resposta e da voz">PT</button>
+          <button id="proBtn" class="chip-btn pro-btn" aria-pressed="false" title="Modo Pro: contexto longo (~30 mil tokens), prioriza Gemini">
+            <svg viewBox="0 0 24 24"><path d="M6 3h12l3 6-9 12L3 9z"/><path d="M3 9h18M12 21 8 9l4-6 4 6z"/></svg>
+            <span>Pro</span>
+          </button>
+          <button id="memoryBtn" class="icon-btn" aria-expanded="false" title="Memória do caso" aria-label="Memória do caso">
+            <svg viewBox="0 0 24 24"><path d="M6 3h11a2 2 0 0 1 2 2v16l-4-2-3 2-3-2-3 2V5a2 2 0 0 1 2-2Z"/><path d="M9 8h6M9 12h6"/></svg>
+            <span id="memoryDot" class="dot-badge" hidden></span>
+          </button>
+          <button id="topNewChatBtn" class="icon-btn" title="Nova conversa" aria-label="Nova conversa">
+            <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Camadas 1 e 2 da memória: ficha fixa do caso + resumo de longo prazo -->
+      <section id="memoryPanel" class="memory-panel" hidden aria-label="Memória do caso">
+        <div class="memory-inner">
+          <label class="memory-field">
+            <span class="memory-title">Memória fixa do caso <span id="caseMemoryCount" class="muted">0/4000</span></span>
+            <small class="muted">Sempre enviada à IA, nunca é cortada. Ex.: pseudônimo, metas, acordos, medicações, contexto.</small>
+            <textarea id="caseMemoryInput" rows="4" maxlength="4000" placeholder="Cliente: &quot;M.&quot;, 34 anos. Meta: reduzir ansiedade social. Acordo: diário de pensamentos semanal."></textarea>
+          </label>
+          <label class="memory-field">
+            <span class="memory-title">Resumo de longo prazo <span id="rollingSummaryCount" class="muted">0/3000</span></span>
+            <small class="muted">Gerado pela IA a partir da conversa. Você pode editar.</small>
+            <textarea id="rollingSummaryInput" rows="5" maxlength="3000" placeholder="Ainda não há resumo. Use o botão abaixo depois de algumas mensagens."></textarea>
+          </label>
+          <div class="memory-actions">
+            <span id="memoryHint" class="muted"></span>
+            <button id="summarizeBtn" class="secondary-btn">
+              <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
+              <span>Atualizar resumo de longo prazo</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <div id="missingKeyBanner" class="notice" hidden>
+        Modo demo: as respostas são simuladas.
+        <button id="bannerConfigBtn" class="link-btn">Adicionar chave grátis</button>
+      </div>
+
+      <main id="chatContainer" class="chat">
+        <div id="messagesList" class="thread"></div>
+      </main>
+
+      <footer class="composer-wrap">
+        <div id="welcomeState" class="welcome">
+          <h1 id="welcomeTitle">Como posso ajudar?</h1>
+        </div>
+        <form id="chatForm" class="composer">
+          <textarea id="userInput" rows="1" placeholder="Pergunte alguma coisa" autocomplete="off"></textarea>
+          <div class="composer-actions">
+            <button type="button" id="micBtn" class="icon-btn" title="Ditar por voz" aria-label="Ditar por voz">
+              <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>
+            </button>
+            <button type="submit" id="sendBtn" class="send-btn empty" title="Enviar" aria-label="Enviar">
+              <svg class="i-send" viewBox="0 0 24 24"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+              <svg class="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+            </button>
+          </div>
+        </form>
+        <div class="suggestions">
+            <button class="suggestion" data-prompt="Explique de forma simples como funciona a inteligência artificial generativa.">Explicar IA generativa</button>
+            <button class="suggestion" data-persona="dev" data-prompt="Escreva uma função em JavaScript para validar e-mail e formatar CPF.">Validar CPF em JavaScript</button>
+            <button class="suggestion" data-persona="professor" data-prompt="Monte um plano de estudos de 4 semanas para criar apps Android.">Plano de estudos Android</button>
+            <button class="suggestion" data-persona="resumidor" data-prompt="Quais são as melhores técnicas de foco para estudar e programar?">Técnicas de foco</button>
+        </div>
+        <p class="disclaimer"><span id="piiBadge" class="pii-badge" title="Filtro de privacidade ativo: e-mails, telefones e documentos são ocultados antes do envio">
+          <svg viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.4 8.3 8 9 4.6-.7 8-4 8-9V6z"/></svg>PII oculta</span>
+          A IA pode errar. Confira informações importantes.</p>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Configurações -->
+  <div id="settingsModal" class="modal" hidden>
+    <div class="dialog" role="dialog" aria-labelledby="settingsTitle">
+      <div class="dialog-head">
+        <h2 id="settingsTitle">Configurações</h2>
+        <button id="closeSettingsBtn" class="icon-btn" aria-label="Fechar">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-tab="appearance" role="tab">Aparência</button>
+        <button class="tab" data-tab="api" role="tab">Chaves e modelo</button>
+        <button class="tab" data-tab="behavior" role="tab">Comportamento</button>
+      </div>
+
+      <section class="tab-panel" data-panel="appearance">
+        <div class="setting">
+          <div class="setting-label">Tema</div>
+          <div class="segmented" data-setting="theme">
+            <button data-value="dark">Escuro</button>
+            <button data-value="light">Claro</button>
+            <button data-value="system">Sistema</button>
+          </div>
+        </div>
+        <div class="setting">
+          <div class="setting-label">Fonte</div>
+          <div class="font-grid" data-setting="font">
+            <button data-value="sans"><span class="font-sample f-sans">Aa</span>Padrão</button>
+            <button data-value="serif"><span class="font-sample f-serif">Aa</span>Serifada</button>
+            <button data-value="rounded"><span class="font-sample f-rounded">Aa</span>Arredondada</button>
+            <button data-value="mono"><span class="font-sample f-mono">Aa</span>Mono</button>
+          </div>
+        </div>
+        <div class="setting">
+          <div class="setting-label">Cor de destaque</div>
+          <div class="swatches" data-setting="accent">
+            <button data-value="neutral" class="sw sw-neutral" aria-label="Neutro"></button>
+            <button data-value="blue" class="sw sw-blue" aria-label="Azul"></button>
+            <button data-value="green" class="sw sw-green" aria-label="Verde"></button>
+            <button data-value="violet" class="sw sw-violet" aria-label="Violeta"></button>
+            <button data-value="orange" class="sw sw-orange" aria-label="Laranja"></button>
+            <button data-value="pink" class="sw sw-pink" aria-label="Rosa"></button>
+          </div>
+        </div>
+        <div class="setting">
+          <div class="setting-label">Tamanho do texto <span id="fontSizeValue" class="muted">16px</span></div>
+          <input id="fontSizeInput" type="range" min="14" max="20" step="1" value="16" />
+        </div>
+        <div class="setting">
+          <div class="setting-label">Espaçamento</div>
+          <div class="segmented" data-setting="density">
+            <button data-value="comfortable">Confortável</button>
+            <button data-value="compact">Compacto</button>
+          </div>
+        </div>
+        <label class="setting toggle-row">
+          <span class="setting-label">Animações</span>
+          <input id="motionInput" type="checkbox" class="switch" checked />
+        </label>
+      </section>
+
+      <section class="tab-panel" data-panel="api" hidden>
+        <p class="hint">Use quantas chaves quiser. Se uma atingir o limite, o app troca sozinho. Chaves gratuitas:
+          <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer">Groq</a>,
+          <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">OpenRouter</a> e
+          <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Gemini</a>.</p>
+        <label class="field"><span>Groq</span><input type="password" id="groqKeyInput" placeholder="gsk_..." autocomplete="off" /></label>
+        <label class="field"><span>OpenRouter</span><input type="password" id="openrouterKeyInput" placeholder="sk-or-..." autocomplete="off" /></label>
+        <label class="field"><span>Gemini</span><input type="password" id="geminiKeyInput" placeholder="AIza..." autocomplete="off" /></label>
+        <p class="hint">Ficam salvas só neste aparelho. Se o servidor já tem chaves no .env, deixe vazio.</p>
+        <label class="field"><span>Modelo preferido</span><select id="modelSelect"></select></label>
+        <label class="field"><span>URL do backend (APK Android)</span><input type="url" id="backendUrlInput" placeholder="https://meu-app.vercel.app" /></label>
+      </section>
+
+      <section class="tab-panel" data-panel="behavior" hidden>
+        <label class="field"><span>Instruções personalizadas</span>
+          <textarea id="systemPromptInput" rows="5" placeholder="Ex.: Responda de forma curta e me chame pelo nome."></textarea>
+        </label>
+        <p class="hint">Quando preenchido, substitui o comportamento da persona escolhida.</p>
+        <label class="setting toggle-row">
+          <span>
+            <span class="setting-label">Filtro de privacidade (anonimizar PII)</span>
+            <small class="hint">Antes de enviar à nuvem, troca e-mails por [EMAIL_OCULTO], telefones por [TEL_OCULTO] e CPF/SSN por [DOC_OCULTO]. Pega só padrões óbvios: nomes e endereços continuam passando.</small>
+          </span>
+          <input id="piiInput" type="checkbox" class="switch" checked />
+        </label>
+        <div class="privacy-note">
+          <svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+          <p><strong>Arquitetura privacy-first.</strong> Suas pastas e notas de casos ficam salvas localmente neste dispositivo (localStorage) e não são armazenadas em banco de dados no servidor. O texto de cada mensagem passa pelo provedor de IA escolhido só para gerar a resposta.</p>
+        </div>
+      </section>
+
+      <div class="dialog-foot">
+        <span id="settingsFeedback" class="feedback"></span>
+        <button id="saveSettingsBtn" class="primary-btn">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
