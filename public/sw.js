@@ -1,8 +1,9 @@
-const CACHE_NAME = 'ia-respostas-v3';
+const CACHE_NAME = 'ia-respostas-v5';
 const ASSETS = [
   '/',
   '/index.html',
   '/styles.css',
+  '/pii.js',
   '/app.js',
   '/theme-boot.js',
   '/manifest.json'

@@ -1,6 +1,6 @@
 // Aplica a aparência salva ANTES da primeira pintura (evita piscar o tema errado).
 (function () {
-  var DEFAULTS = { theme: 'dark', font: 'sans', accent: 'neutral', fontSize: 16, density: 'comfortable', motion: true };
+  var DEFAULTS = { theme: 'dark', font: 'sans', accent: 'green', fontSize: 16, density: 'comfortable', motion: true };
   var media = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
 
   function apply(appearance) {
@@ -14,7 +14,7 @@
     root.dataset.motion = a.motion ? 'on' : 'off';
     root.style.setProperty('--fs', Math.min(20, Math.max(14, Number(a.fontSize) || 16)) + 'px');
     var meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', theme === 'light' ? '#ffffff' : '#121212');
+    if (meta) meta.setAttribute('content', theme === 'light' ? '#faf8f5' : '#0c0e12');
     return a;
   }
 

@@ -23,7 +23,14 @@ const PERSONA_INFO = {
   tradutor: 'Traduz preservando tom e formatação',
   soap_notes: 'Notas de sessão viram SOAP ou DAP',
   pre_session: 'Preparo de 30 segundos antes da sessão',
-  case_organizer: 'Metas, cronograma e evolução do caso'
+  case_organizer: 'Metas, cronograma e evolução do caso',
+  cfp_record: 'Evolução ética e objetiva (Res. CFP 01/2009)',
+  case_formulation: '5Ps do caso e material para o paciente'
+};
+// Mini-tag da persona na lista de conversas
+const PERSONA_TAG = {
+  geral: 'Geral', dev: 'Dev', professor: 'Prof', resumidor: 'Resumo', tradutor: 'Trad',
+  soap_notes: 'SOAP', pre_session: 'Brief', case_organizer: 'Caso', cfp_record: 'CFP', case_formulation: '5Ps'
 };
 const PERSONA_GROUPS = { geral: 'Geral', counseling: 'Counseling / Psicologia' };
 const FALLBACK_PERSONAS = [
@@ -34,18 +41,46 @@ const FALLBACK_PERSONAS = [
   { id: 'tradutor', name: 'Tradutor', group: 'geral' },
   { id: 'soap_notes', name: 'Notas SOAP / DAP', group: 'counseling' },
   { id: 'pre_session', name: 'Briefing Pré-Sessão', group: 'counseling' },
-  { id: 'case_organizer', name: 'Organizador de Caso e Metas', group: 'counseling' }
+  { id: 'case_organizer', name: 'Organizador de Caso e Metas', group: 'counseling' },
+  { id: 'cfp_record', name: 'Prontuário CFP (Res. 01/2009)', group: 'counseling' },
+  { id: 'case_formulation', name: 'Formulação 5Ps & Psicoeducação', group: 'counseling' }
 ];
-const LIMITS = { caseMemory: 4000, rollingSummary: 3000 };
+// Workspaces: cards da tela inicial. "fill" só preenche o campo (o profissional cola as notas)
+const WORKSPACES = {
+  counseling: {
+    subtitle: 'Prontuários SOAP/DAP, evolução CFP e memória contínua do caso com anonimização local',
+    defaultPersona: 'soap_notes',
+    cards: [
+      { persona: 'soap_notes', badge: 'SOAP / DAP', title: 'Notas SOAP / DAP pós-sessão', desc: 'Cole ou dite as anotações e receba o registro estruturado.', prompt: 'Transforme estas anotações da sessão em notas SOAP:\n\n', fill: true },
+      { persona: 'cfp_record', badge: 'CFP 01/2009', title: 'Evolução de Prontuário CFP', desc: 'Registro ético e objetivo, só com o que consta no relato.', prompt: 'Registre a evolução desta sessão no prontuário (Res. CFP 01/2009):\n\n', fill: true },
+      { persona: 'pre_session', badge: 'Briefing', title: 'Briefing de 30s pré-sessão', desc: 'Última sessão, pendências e focos de hoje, a partir da memória do caso.', prompt: 'Prepare o briefing para a sessão de hoje.' },
+      { persona: 'case_formulation', badge: '5Ps', title: 'Formulação 5Ps & tarefa para o paciente', desc: 'Organiza o caso e gera um material acolhedor para enviar ao cliente.', prompt: 'Monte a formulação 5Ps e a tarefa para o paciente com base nestas notas:\n\n', fill: true }
+    ]
+  },
+  geral: {
+    subtitle: 'Modelos open-source gratuitos com troca automática de provedor',
+    defaultPersona: 'geral',
+    cards: [
+      { persona: 'geral', badge: 'Geral', title: 'Explicar IA generativa', desc: 'Uma explicação simples, sem jargão.', prompt: 'Explique de forma simples como funciona a inteligência artificial generativa.' },
+      { persona: 'dev', badge: 'Dev Sênior', title: 'Validar CPF em JavaScript', desc: 'Função revisada, com os riscos apontados.', prompt: 'Escreva uma função em JavaScript para validar e-mail e formatar CPF.' },
+      { persona: 'professor', badge: 'Professor', title: 'Plano de estudos Android', desc: '4 semanas, do simples ao app publicado.', prompt: 'Monte um plano de estudos de 4 semanas para criar apps Android.' },
+      { persona: 'resumidor', badge: 'Resumidor', title: 'Técnicas de foco', desc: 'Direto ao ponto, em até 5 itens.', prompt: 'Quais são as melhores técnicas de foco para estudar e programar?' }
+    ]
+  }
+};
+const LIMITS = { caseMemory: 4000, rollingSummary: 3000, redactTerms: 600 };
+// Cauda quente: as últimas mensagens (2 pares usuário/IA) nunca são compactadas
+const HOT_TAIL = 4;
 const VOICE_LANG = { pt: 'pt-BR', en: 'en-US' };
 
 const settings = Object.assign(
   {
     keys: { groq: '', openrouter: '', gemini: '' }, systemPrompt: '', backendUrl: '', model: '', sidebarClosed: false,
-    tier: 'standard', lang: 'pt', pii: true
+    lang: 'pt', pii: true, workspace: 'counseling'
   },
   store.get('ia.settings', {})
 );
+delete settings.tier; // botão Pro antigo: o orçamento de contexto agora vem do modelo
 settings.appearance = Object.assign({}, window.APPEARANCE_DEFAULTS, settings.appearance || {});
 
 let threads = store.get('ia.threads', []);
@@ -70,10 +105,13 @@ const el = {
   groqKey: $('groqKeyInput'), orKey: $('openrouterKeyInput'), geminiKey: $('geminiKeyInput'),
   sysPrompt: $('systemPromptInput'), backendUrl: $('backendUrlInput'),
   fontSize: $('fontSizeInput'), fontSizeValue: $('fontSizeValue'), motion: $('motionInput'),
-  proBtn: $('proBtn'), langBtn: $('langBtn'), memoryBtn: $('memoryBtn'), memoryDot: $('memoryDot'),
+  langBtn: $('langBtn'), memoryBtn: $('memoryBtn'), memoryDot: $('memoryDot'),
   memoryPanel: $('memoryPanel'), caseMemory: $('caseMemoryInput'), rollingSummary: $('rollingSummaryInput'),
   caseMemoryCount: $('caseMemoryCount'), rollingSummaryCount: $('rollingSummaryCount'),
-  summarizeBtn: $('summarizeBtn'), memoryHint: $('memoryHint'), pii: $('piiInput'), piiBadge: $('piiBadge')
+  summarizeBtn: $('summarizeBtn'), memoryHint: $('memoryHint'), pii: $('piiInput'), piiBadge: $('piiBadge'),
+  redactTerms: $('redactTermsInput'), workspace: $('workspaceSwitch'), suggestions: $('suggestions'),
+  welcomeSub: $('welcomeSubtitle'), meter: $('contextMeter'), meterFill: $('contextMeterFill'),
+  meterText: $('contextMeterText'), micTimer: $('micTimer')
 };
 
 // Ícones de traço (constantes confiáveis, nunca vêm do usuário)
@@ -84,7 +122,8 @@ const ICON = {
   stop: '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
   regen: '<svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>',
   trash: '<svg viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4h6v3"/></svg>',
-  download: '<svg viewBox="0 0 24 24"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>'
+  download: '<svg viewBox="0 0 24 24"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>',
+  alert: '<svg viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>'
 };
 
 function apiUrl(path) {
@@ -103,25 +142,16 @@ function saveSettingsStore() {
 const isMobile = () => window.matchMedia('(max-width: 860px)').matches;
 
 // ===========================================================================
-// Filtro de privacidade: oculta PII óbvia ANTES de o texto sair do aparelho.
-// Ordem importa: documentos antes de telefones (um SSN parece um telefone curto).
+// Filtro de privacidade: regras em pii.js (CPF, RG, CNS, CEP, e-mail, telefone)
 // ===========================================================================
-const PII_RULES = [
-  [/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, '[EMAIL_OCULTO]'],
-  [/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/g, '[DOC_OCULTO]'], // CPF
-  [/\b\d{3}-\d{2}-\d{4}\b/g, '[DOC_OCULTO]'], // SSN (EUA)
-  [/(\+?55[\s-]?)?\(?\b\d{2}\)?[\s-]?9?\d{4}[\s-]\d{4}\b/g, '[TEL_OCULTO]'], // Brasil
-  [/(\+?1[\s.-]?)?\(?\b\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b/g, '[TEL_OCULTO]'] // EUA/Canadá
-];
+const { redactPII } = window.PII;
 
-function redactPII(text) {
-  let out = String(text || '');
-  for (const [re, label] of PII_RULES) out = out.replace(re, label);
-  return out;
-}
-
-function privacy(text) {
-  return settings.pii ? redactPII(text) : text;
+// Termos do caso (nomes reais) são trocados sempre que configurados;
+// as regras de documentos/contatos seguem o interruptor de privacidade.
+function privacy(text, thread) {
+  const terms = thread?.redactTerms || '';
+  if (settings.pii) return redactPII(text, terms);
+  return terms ? window.PII.redactTerms(String(text || ''), terms) : text;
 }
 
 // ===========================================================================
@@ -151,7 +181,10 @@ function splitRow(line) {
   return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
 }
 
-function renderMarkdown(src) {
+// "ATENÇÃO — RISCO" / "ATTENTION — RISK" no começo de um bloco (com ou sem #, **, >)
+const RISK_RE = /^[\s>#*_-]*(ATENÇÃO|ATTENTION)\s*[—–-]+\s*(RISCO|RISK)/i;
+
+function renderMarkdown(src, nested = false) {
   const lines = String(src || '').replace(/\r\n?/g, '\n').split('\n');
   const out = [];
   let i = 0;
@@ -159,6 +192,19 @@ function renderMarkdown(src) {
 
   while (i < lines.length) {
     const line = lines[i];
+
+    if (!nested && RISK_RE.test(line)) {
+      // O bloco vai até a próxima linha vazia; se o alerta for só um título, inclui o parágrafo seguinte
+      const block = [];
+      while (i < lines.length && lines[i].trim()) block.push(lines[i++]);
+      if (block.length === 1) {
+        while (i < lines.length && !lines[i].trim()) i++;
+        while (i < lines.length && lines[i].trim()) block.push(lines[i++]);
+      }
+      out.push(`<div class="risk-callout" role="alert"><div class="risk-head">${ICON.alert}<span>Alerta clínico</span></div>` +
+        `${renderMarkdown(block.join('\n'), true)}</div>`);
+      continue;
+    }
 
     const fence = line.match(/^\s*```\s*([\w#+.-]*)/);
     if (fence) {
@@ -267,8 +313,9 @@ function activeThread() { return threads.find((t) => t.id === activeId); }
 
 function createThread(persona) {
   const t = {
-    id: uid(), title: 'Nova conversa', persona: persona || activeThread()?.persona || 'geral', messages: [], updatedAt: Date.now(),
-    caseMemory: '', rollingSummary: '', summarizedUpTo: 0, needsSummary: false
+    id: uid(), title: 'Nova conversa', messages: [], updatedAt: Date.now(),
+    persona: persona || activeThread()?.persona || WORKSPACES[currentWorkspace()].defaultPersona,
+    caseMemory: '', rollingSummary: '', redactTerms: '', summarizedUpTo: 0, compactedAt: 0, needsSummary: false
   };
   threads.unshift(t);
   activeId = t.id;
@@ -282,7 +329,7 @@ function ensureThread() {
 
 // Conversas vazias (sem mensagens nem memória) não ficam acumulando no histórico
 function dropEmptyThreads() {
-  threads = threads.filter((t) => t.messages.length || t.caseMemory || t.rollingSummary || t.id === activeId);
+  threads = threads.filter((t) => t.messages.length || t.caseMemory || t.rollingSummary || t.redactTerms || t.id === activeId);
 }
 
 function makeTitle(text) {
@@ -376,8 +423,25 @@ function renderThreadList() {
     li.className = 'thread-item' + (t.id === activeId ? ' active' : '');
     const open = document.createElement('button');
     open.className = 'thread-open';
-    open.textContent = t.title;
-    open.title = t.title;
+    const tag = PERSONA_TAG[t.persona];
+    if (tag) {
+      const chip = document.createElement('span');
+      const group = personas.find((p) => p.id === t.persona)?.group;
+      chip.className = 'thread-tag' + (group === 'counseling' ? ' clinical' : '');
+      chip.textContent = tag;
+      open.appendChild(chip);
+    }
+    const title = document.createElement('span');
+    title.className = 'thread-title';
+    title.textContent = t.title;
+    open.appendChild(title);
+    if (t.caseMemory) {
+      const mem = document.createElement('span');
+      mem.className = 'thread-mem';
+      mem.title = 'Memória do caso ativa';
+      open.appendChild(mem);
+    }
+    open.title = t.caseMemory ? `${t.title} · memória do caso ativa` : t.title;
     open.addEventListener('click', () => switchThread(t.id));
     const exp = iconButton('download', null, 'Exportar .md');
     exp.classList.add('thread-more');
@@ -453,9 +517,8 @@ function metaLabel(m) {
   const parts = [];
   if (meta.providerUsed === 'demo') parts.push('modo demo');
   else if (meta.modelUsed) parts.push(meta.modelUsed);
-  if (meta.tier === 'pro') parts.push('Pro');
   if (meta.fallbackTriggered) parts.push('fallback');
-  if (meta.trimmedCount) parts.push(`${meta.trimmedCount} msgs antigas resumidas`);
+  if (meta.trimmedCount) parts.push(`${meta.trimmedCount} msgs fora da janela`);
   if (meta.durationMs) parts.push(`${(meta.durationMs / 1000).toFixed(1)}s`);
   if (meta.stopped) parts.push('interrompida');
   return parts.join(' · ');
@@ -495,7 +558,16 @@ function renderMessages() {
   const msgs = t ? t.messages : [];
   el.list.textContent = '';
   el.layout.classList.toggle('is-empty', msgs.length === 0);
-  msgs.forEach((m, i) => el.list.appendChild(messageNode(m, i, i === msgs.length - 1)));
+  msgs.forEach((m, i) => {
+    // O histórico visual fica inteiro; só marca onde o contexto foi compactado
+    if (i && i === t.compactedAt) {
+      const note = document.createElement('div');
+      note.className = 'compact-note';
+      note.textContent = 'Contexto compactado e reambientado automaticamente';
+      el.list.appendChild(note);
+    }
+    el.list.appendChild(messageNode(m, i, i === msgs.length - 1));
+  });
   scrollToBottom(true);
 }
 
@@ -503,9 +575,106 @@ function renderAll() {
   const t = activeThread();
   document.title = t && t.messages.length ? `${t.title} · IA de Respostas` : 'IA de Respostas';
   renderPersonas();
+  renderWorkspace();
   renderThreadList();
   renderMessages();
   renderMemory();
+  updateContextMeter();
+}
+
+// ===========================================================================
+// Workspace (Clínica | Geral): subtítulo e cards da tela inicial
+// ===========================================================================
+function currentWorkspace() {
+  return WORKSPACES[settings.workspace] ? settings.workspace : 'counseling';
+}
+
+function renderWorkspace() {
+  const ws = currentWorkspace();
+  el.workspace.querySelectorAll('button').forEach((b) => {
+    const on = b.dataset.workspace === ws;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-checked', String(on));
+  });
+  el.welcomeSub.textContent = WORKSPACES[ws].subtitle;
+  el.suggestions.textContent = '';
+  for (const card of WORKSPACES[ws].cards) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'suggestion-card';
+    const badge = document.createElement('span');
+    badge.className = 'sc-badge';
+    badge.textContent = card.badge;
+    const title = document.createElement('strong');
+    title.className = 'sc-title';
+    title.textContent = card.title;
+    const desc = document.createElement('span');
+    desc.className = 'sc-desc';
+    desc.textContent = card.desc;
+    b.append(badge, title, desc);
+    b.addEventListener('click', () => useCard(card));
+    el.suggestions.appendChild(b);
+  }
+}
+
+function useCard(card) {
+  setPersona(card.persona);
+  if (!card.fill) return sendMessage(card.prompt);
+  el.input.value = card.prompt;
+  autoGrow();
+  el.input.focus();
+  el.input.setSelectionRange(el.input.value.length, el.input.value.length);
+}
+
+function setWorkspace(ws) {
+  if (!WORKSPACES[ws] || ws === settings.workspace) return;
+  settings.workspace = ws;
+  saveSettingsStore();
+  alignEmptyThread();
+  renderAll();
+}
+
+// Conversa ainda vazia assume a persona padrão do workspace, se for de outro grupo
+function alignEmptyThread() {
+  const t = activeThread();
+  if (t && t.messages.length) return;
+  const ws = currentWorkspace();
+  const group = (id) => FALLBACK_PERSONAS.find((p) => p.id === id)?.group;
+  if (t && group(t.persona) === ws) return;
+  ensureThread().persona = WORKSPACES[ws].defaultPersona;
+  saveThreads();
+}
+
+// ===========================================================================
+// Medidor da janela de contexto (estimativa local, em caracteres)
+// ===========================================================================
+const SYSTEM_OVERHEAD_CHARS = 1200; // regras da persona e de estilo enviadas pelo servidor
+const MAX_MESSAGE_CHARS = 8000; // o servidor corta cada mensagem neste tamanho
+
+function contextBudget() {
+  const id = settings.model || serverStatus?.defaultModel;
+  return serverStatus?.models?.find((m) => m.id === id)?.maxContextChars || serverStatus?.maxContextChars || 14000;
+}
+
+function updateContextMeter() {
+  const t = activeThread();
+  if (t && compacting.has(t.id)) {
+    el.meter.className = 'context-meter busy';
+    el.meterText.textContent = 'Compactando...';
+    return;
+  }
+  let chars = el.input.value.length;
+  if (t && (t.messages.length || t.caseMemory || t.rollingSummary)) {
+    chars += SYSTEM_OVERHEAD_CHARS + (t.caseMemory || '').length + (t.rollingSummary || '').length;
+    const start = Math.min(t.summarizedUpTo || 0, Math.max(0, t.messages.length - HOT_TAIL));
+    for (const m of t.messages.slice(start)) chars += Math.min((m.content || '').length, MAX_MESSAGE_CHARS);
+  }
+  const budget = contextBudget();
+  const pct = Math.min(100, Math.round((chars / budget) * 100));
+  el.meter.className = 'context-meter' + (pct > 60 ? ' warn' : '');
+  el.meterFill.style.width = `${pct}%`;
+  el.meterText.textContent = `${pct}% ctx`;
+  el.meter.title = `Janela de contexto: ~${chars.toLocaleString('pt-BR')} de ${budget.toLocaleString('pt-BR')} caracteres. Acima de 75% a conversa é compactada sozinha.`;
 }
 
 // ===========================================================================
@@ -515,12 +684,13 @@ function renderMemory() {
   const t = activeThread();
   el.caseMemory.value = t?.caseMemory || '';
   el.rollingSummary.value = t?.rollingSummary || '';
+  el.redactTerms.value = t?.redactTerms || '';
   updateMemoryCounts();
   const pending = Boolean(t?.needsSummary);
   el.memoryDot.hidden = !pending;
   el.memoryHint.textContent = pending
-    ? 'Mensagens antigas saíram do contexto. Atualize o resumo para a IA não esquecer.'
-    : t?.summarizedUpTo ? `Resumo cobre ${t.summarizedUpTo} mensagens.` : '';
+    ? 'A compactação automática falhou. Tente compactar manualmente.'
+    : t?.summarizedUpTo ? `Resumo cobre ${t.summarizedUpTo} mensagens; as mais recentes seguem inteiras.` : '';
 }
 
 function updateMemoryCounts() {
@@ -538,29 +708,40 @@ function toggleMemoryPanel(force) {
 let memorySaveTimer = null;
 function onMemoryInput(field) {
   const t = ensureThread();
-  t[field] = (field === 'caseMemory' ? el.caseMemory : el.rollingSummary).value.slice(0, LIMITS[field]);
+  const input = { caseMemory: el.caseMemory, rollingSummary: el.rollingSummary, redactTerms: el.redactTerms }[field];
+  t[field] = input.value.slice(0, LIMITS[field]);
   t.updatedAt = Date.now();
   updateMemoryCounts();
+  updateContextMeter();
   clearTimeout(memorySaveTimer);
   memorySaveTimer = setTimeout(() => { saveThreads(); renderThreadList(); }, 400);
 }
 
-let summarizing = false;
-async function updateSummary() {
-  const thread = activeThread();
-  if (summarizing || !thread) return;
-  const fresh = thread.messages.slice(thread.summarizedUpTo || 0).filter((m) => !m.pending && !m.meta?.error && m.content);
-  if (!fresh.length) return toast('Nenhuma mensagem nova para resumir');
-  const upTo = thread.messages.length;
-  summarizing = true;
-  el.summarizeBtn.classList.add('loading');
+// ===========================================================================
+// Auto-compactação e reambientação do contexto (estilo OpenCode / Letta)
+// Mensagens antigas viram resumo de handoff; a cauda quente segue inteira.
+// ===========================================================================
+const compacting = new Set(); // ids de conversas sendo compactadas
+
+async function compactThread(thread, { manual = false } = {}) {
+  if (!thread || compacting.has(thread.id)) return;
+  const cut = Math.max(0, thread.messages.length - HOT_TAIL);
+  const from = Math.min(thread.summarizedUpTo || 0, cut);
+  const chunk = thread.messages.slice(from, cut).filter((m) => !m.pending && !m.meta?.error && m.content);
+  if (!chunk.length) {
+    if (manual) toast(`Nada para compactar: as ${HOT_TAIL} últimas mensagens ficam sempre na janela`);
+    return;
+  }
+  compacting.add(thread.id);
+  if (thread.id === activeId) updateContextMeter();
+  if (manual) el.summarizeBtn.classList.add('loading');
   try {
     const res = await fetch(apiUrl('/api/summarize'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        previousSummary: privacy(thread.rollingSummary || ''),
-        messages: fresh.map((m) => ({ role: m.role, content: privacy(m.content) })),
+        previousSummary: privacy(thread.rollingSummary || '', thread),
+        messages: chunk.map((m) => ({ role: m.role, content: privacy(m.content, thread) })),
         lang: settings.lang,
         apiKeys: clientKeys()
       })
@@ -569,40 +750,33 @@ async function updateSummary() {
     if (!res.ok || !data.summary) throw new Error(data.error || `Erro HTTP ${res.status}`);
     // Grava na conversa que pediu o resumo, mesmo se o usuário já trocou de conversa
     thread.rollingSummary = data.summary.slice(0, LIMITS.rollingSummary);
-    thread.summarizedUpTo = upTo;
+    thread.summarizedUpTo = cut;
+    thread.compactedAt = cut;
     thread.needsSummary = false;
     thread.updatedAt = Date.now();
     saveThreads();
-    if (thread.id === activeId) renderMemory();
-    toast('Resumo de longo prazo atualizado');
+    if (thread.id === activeId) { renderMessages(); renderMemory(); }
+    if (manual) toast('Contexto compactado');
   } catch (err) {
-    toast(err.message || 'Não foi possível resumir agora');
+    thread.needsSummary = true;
+    saveThreads();
+    if (thread.id === activeId) renderMemory();
+    toast(manual ? err.message || 'Não foi possível compactar agora' : 'Compactação automática falhou; tente na Memória do caso');
   } finally {
-    summarizing = false;
-    el.summarizeBtn.classList.remove('loading');
+    compacting.delete(thread.id);
+    if (thread.id === activeId) updateContextMeter();
+    if (manual) el.summarizeBtn.classList.remove('loading');
   }
 }
 
 // ===========================================================================
-// Plano (Standard/Pro), idioma e privacidade
+// Idioma e privacidade
 // ===========================================================================
 function renderModeControls() {
-  const pro = settings.tier === 'pro';
-  el.proBtn.setAttribute('aria-pressed', String(pro));
-  el.proBtn.title = pro
-    ? 'Modo Pro ativo: contexto de ~30 mil tokens, prioriza Gemini. Clique para voltar ao Standard.'
-    : 'Ativar Modo Pro: contexto longo (~30 mil tokens), prioriza Gemini';
   el.langBtn.textContent = settings.lang === 'en' ? 'EN' : 'PT';
   el.langBtn.title = settings.lang === 'en' ? 'Respostas e voz em inglês (clique para português)' : 'Respostas e voz em português (clique para inglês)';
   el.input.placeholder = settings.lang === 'en' ? 'Ask anything' : 'Pergunte alguma coisa';
   el.piiBadge.hidden = !settings.pii;
-}
-
-function toggleTier() {
-  settings.tier = settings.tier === 'pro' ? 'standard' : 'pro';
-  saveSettingsStore();
-  renderModeControls();
-  toast(settings.tier === 'pro' ? 'Modo Pro: contexto longo ativado' : 'Modo Standard: respostas mais rápidas');
 }
 
 function toggleLang() {
@@ -682,15 +856,14 @@ function clientKeys() {
 // Tudo que sai do aparelho passa pelo filtro de privacidade (se ativo)
 function buildPayload(thread, message, history) {
   return {
-    message: privacy(message),
-    history: history.filter((m) => !m.meta?.error && m.content).map((m) => ({ role: m.role, content: privacy(m.content) })),
+    message: privacy(message, thread),
+    history: history.filter((m) => !m.meta?.error && m.content).map((m) => ({ role: m.role, content: privacy(m.content, thread) })),
     persona: thread.persona,
     model: settings.model || undefined,
-    systemPrompt: settings.systemPrompt ? privacy(settings.systemPrompt) : undefined,
-    tier: settings.tier,
+    systemPrompt: settings.systemPrompt ? privacy(settings.systemPrompt, thread) : undefined,
     lang: settings.lang,
-    caseMemory: thread.caseMemory ? privacy(thread.caseMemory) : undefined,
-    rollingSummary: thread.rollingSummary ? privacy(thread.rollingSummary) : undefined,
+    caseMemory: thread.caseMemory ? privacy(thread.caseMemory, thread) : undefined,
+    rollingSummary: thread.rollingSummary ? privacy(thread.rollingSummary, thread) : undefined,
     apiKeys: clientKeys()
   };
 }
@@ -734,13 +907,16 @@ async function sendMessage(text, { regenerate = false } = {}) {
     text = text.trim();
     if (!text) return;
     // Guarda na conversa exatamente o que foi enviado: o usuário vê o que foi ocultado
-    const safe = privacy(text);
+    const safe = privacy(text, thread);
     if (safe !== text) toast('Dados sensíveis ocultados antes do envio');
     text = safe;
     if (!thread.messages.length) thread.title = makeTitle(text);
     thread.messages.push({ role: 'user', content: text });
   }
-  const history = thread.messages.slice(0, -1);
+  // Só o que vem depois do último ponto de compactação vai bruto; a cauda quente
+  // é garantida mesmo com dados antigos em que summarizedUpTo cobria tudo
+  const start = Math.min(thread.summarizedUpTo || 0, Math.max(0, thread.messages.length - 1 - HOT_TAIL));
+  const history = thread.messages.slice(start, -1);
   const message = thread.messages[thread.messages.length - 1].content;
   const reply = { role: 'assistant', content: '', meta: {}, pending: true };
   thread.messages.push(reply);
@@ -771,14 +947,11 @@ async function sendMessage(text, { regenerate = false } = {}) {
     if (!reply.content) reply.content = '_Geração interrompida._';
     thread.updatedAt = Date.now();
     if (controller === myController) { controller = null; setBusy(false); }
-    // Histórico antigo saiu do contexto: sugere atualizar o resumo de longo prazo
-    if (reply.meta.trimmedCount > 0 && !thread.needsSummary) {
-      thread.needsSummary = true;
-      if (thread.id === activeId) toast('Conversa longa: atualize o resumo na Memória do caso');
-    }
     saveThreads();
-    if (thread.id === activeId) { renderMessages(); renderMemory(); }
+    if (thread.id === activeId) { renderMessages(); renderMemory(); updateContextMeter(); }
     renderThreadList();
+    // Janela perto do limite (~75%) ou já cortando: compacta em segundo plano
+    if (!reply.meta.error && (reply.meta.compactSuggested || reply.meta.trimmedCount > 0)) compactThread(thread);
   }
 }
 
@@ -795,25 +968,73 @@ function regenerate() {
 // ===========================================================================
 const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognizer = null;
+let dictation = null; // { started, timer, base, finals } enquanto o ditado estiver ativo
 
+function formatClock(ms) {
+  const total = Math.floor(ms / 1000);
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
+// Ditado pós-sessão: contínuo (não para na primeira pausa) e com cronômetro MM:SS
 function toggleDictation() {
   if (!Recognition) return toast('Ditado por voz não suportado neste navegador');
-  if (recognizer) { recognizer.stop(); return; }
-  recognizer = new Recognition();
-  recognizer.lang = VOICE_LANG[settings.lang] || 'pt-BR';
-  recognizer.interimResults = true;
-  recognizer.continuous = false;
-  const base = el.input.value ? `${el.input.value.trimEnd()} ` : '';
-  recognizer.onresult = (e) => {
-    let text = '';
-    for (const r of e.results) text += r[0].transcript;
-    el.input.value = base + text;
+  if (dictation) return stopDictation();
+  const d = { started: Date.now(), base: el.input.value ? `${el.input.value.trimEnd()} ` : '', finals: '' };
+  dictation = d;
+  el.mic.classList.add('recording');
+  el.mic.title = 'Parar ditado';
+  el.micTimer.hidden = false;
+  el.micTimer.textContent = '00:00';
+  d.timer = setInterval(() => { el.micTimer.textContent = formatClock(Date.now() - d.started); }, 1000);
+  startRecognizer(d);
+}
+
+function startRecognizer(d) {
+  const r = new Recognition();
+  recognizer = r;
+  r.lang = VOICE_LANG[settings.lang] || 'pt-BR';
+  r.interimResults = true;
+  r.continuous = true;
+  const openedAt = Date.now();
+  let heard = false;
+  r.onresult = (e) => {
+    heard = true;
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const res = e.results[i];
+      if (res.isFinal) d.finals += `${res[0].transcript.trim()} `;
+      else interim += res[0].transcript;
+    }
+    el.input.value = d.base + d.finals + interim;
     autoGrow();
   };
-  recognizer.onerror = (e) => { if (e.error !== 'aborted') toast(`Microfone: ${e.error}`); };
-  recognizer.onend = () => { recognizer = null; el.mic.classList.remove('recording'); };
-  el.mic.classList.add('recording');
-  try { recognizer.start(); } catch { recognizer = null; el.mic.classList.remove('recording'); }
+  r.onerror = (e) => {
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      toast('Permita o uso do microfone para ditar');
+      stopDictation();
+    } else if (e.error !== 'aborted' && e.error !== 'no-speech') {
+      toast(`Microfone: ${e.error}`);
+    }
+  };
+  // O navegador encerra sozinho após silêncio longo: reabre enquanto o ditado estiver ativo
+  r.onend = () => {
+    if (dictation !== d || recognizer !== r) return;
+    if (heard || Date.now() - openedAt > 2000) startRecognizer(d);
+    else stopDictation();
+  };
+  try { r.start(); } catch { stopDictation(); }
+}
+
+function stopDictation() {
+  const d = dictation;
+  dictation = null;
+  if (d) clearInterval(d.timer);
+  const r = recognizer;
+  recognizer = null;
+  if (r) { try { r.stop(); } catch { /* já parado */ } }
+  el.mic.classList.remove('recording');
+  el.mic.title = 'Ditar por voz';
+  el.micTimer.hidden = true;
 }
 
 let speakingBtn = null;
@@ -888,15 +1109,19 @@ function updateStatusUi() {
 
 function fillModels() {
   el.model.textContent = '';
-  el.model.appendChild(new Option('Automático (melhor disponível)', ''));
+  el.model.appendChild(new Option('Auto (Cascata Inteligente)', ''));
   for (const p of serverStatus?.providers || []) {
     const group = document.createElement('optgroup');
     group.label = p.name;
-    for (const m of p.models) group.appendChild(new Option(`${m.name} · ${m.badge}`, m.id));
+    for (const m of p.models) {
+      const wide = m.window === 'wide' ? ' · janela ampla' : '';
+      group.appendChild(new Option(`${m.name} · ${m.badge}${wide}`, m.id));
+    }
     el.model.appendChild(group);
   }
   el.model.value = settings.model || '';
   if (el.model.value !== (settings.model || '')) el.model.value = '';
+  updateContextMeter();
 }
 
 function showTab(name) {
@@ -910,7 +1135,6 @@ function openSettings(tab = 'appearance') {
   el.geminiKey.value = settings.keys.gemini || '';
   el.sysPrompt.value = settings.systemPrompt || '';
   el.backendUrl.value = settings.backendUrl || '';
-  el.model.value = settings.model || '';
   el.pii.checked = settings.pii;
   el.feedback.textContent = '';
   syncAppearanceControls();
@@ -931,7 +1155,6 @@ function saveSettings() {
   settings.keys = { groq: el.groqKey.value.trim(), openrouter: el.orKey.value.trim(), gemini: el.geminiKey.value.trim() };
   settings.systemPrompt = el.sysPrompt.value.trim();
   settings.backendUrl = url;
-  settings.model = el.model.value;
   settings.pii = el.pii.checked;
   saveSettingsStore();
   renderModeControls();
@@ -973,6 +1196,7 @@ function autoGrow() {
 el.form.addEventListener('submit', (e) => {
   e.preventDefault();
   if (busy) { stopGeneration(); return; }
+  if (dictation) stopDictation();
   const text = el.input.value;
   if (!text.trim()) return;
   el.input.value = '';
@@ -986,7 +1210,7 @@ el.input.addEventListener('keydown', (e) => {
     if (!busy) el.form.requestSubmit();
   }
 });
-el.input.addEventListener('input', autoGrow);
+el.input.addEventListener('input', () => { autoGrow(); updateContextMeter(); });
 el.mic.addEventListener('click', toggleDictation);
 
 el.menuBtn.addEventListener('click', openSidebar);
@@ -997,12 +1221,22 @@ el.topNewChat.addEventListener('click', newChat);
 el.search.addEventListener('input', renderThreadList);
 
 el.personaBtn.addEventListener('click', (e) => { e.stopPropagation(); togglePersonaMenu(); });
-el.proBtn.addEventListener('click', toggleTier);
+el.model.addEventListener('change', () => {
+  settings.model = el.model.value;
+  saveSettingsStore();
+  updateContextMeter();
+  toast(settings.model ? `Modelo: ${el.model.selectedOptions[0].text.split(' · ')[0]}` : 'Auto: cascata inteligente entre os provedores');
+});
 el.langBtn.addEventListener('click', toggleLang);
 el.memoryBtn.addEventListener('click', () => toggleMemoryPanel());
 el.caseMemory.addEventListener('input', () => onMemoryInput('caseMemory'));
 el.rollingSummary.addEventListener('input', () => onMemoryInput('rollingSummary'));
-el.summarizeBtn.addEventListener('click', updateSummary);
+el.redactTerms.addEventListener('input', () => onMemoryInput('redactTerms'));
+el.workspace.addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-workspace]');
+  if (b) setWorkspace(b.dataset.workspace);
+});
+el.summarizeBtn.addEventListener('click', () => compactThread(activeThread(), { manual: true }));
 document.addEventListener('click', (e) => {
   if (!el.personaBar.hidden && !e.target.closest('.persona-menu')) togglePersonaMenu(false);
 });
@@ -1024,13 +1258,6 @@ document.querySelectorAll('[data-setting]').forEach((group) => {
 el.fontSize.addEventListener('input', () => setAppearance({ fontSize: Number(el.fontSize.value) }));
 el.motion.addEventListener('change', () => setAppearance({ motion: el.motion.checked }));
 
-document.querySelectorAll('.suggestion').forEach((card) => {
-  card.addEventListener('click', () => {
-    if (card.dataset.persona) setPersona(card.dataset.persona);
-    sendMessage(card.dataset.prompt);
-  });
-});
-
 // Delegação: copiar código, copiar/ouvir/regenerar resposta
 el.list.addEventListener('click', (e) => {
   const copyCode = e.target.closest('.copy-code');
@@ -1051,7 +1278,7 @@ el.list.addEventListener('click', (e) => {
 });
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { closeSettings(); closeDrawer(); togglePersonaMenu(false); }
+  if (e.key === 'Escape') { closeSettings(); closeDrawer(); togglePersonaMenu(false); if (dictation) stopDictation(); }
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'o') { e.preventDefault(); newChat(); }
 });
 
@@ -1061,6 +1288,7 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
 
+alignEmptyThread();
 renderModeControls();
 renderAll();
 loadStatus();

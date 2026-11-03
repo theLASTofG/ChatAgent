@@ -1,47 +1,118 @@
-# 🤖 IA de Respostas Open-Source (0 Custos • Web & Android)
+# IA de Respostas — Copiloto Clínico e Assistente Geral (custo zero)
 
-Projeto completo de uma **IA de Respostas** utilizando modelos **Open-Source gratuitos** (**Llama 3.3 70B**, **Llama 3.1 8B**, **Gemma 2 9B** e **Mixtral 8x7B**) através da API gratuita da **Groq Cloud**, construído com foco em **R$ 0,00 de custo** e pronto para escalar para **Android** (via PWA ou Capacitor APK).
+Chat de IA para web e Android que usa **só APIs gratuitas** (Groq, OpenRouter e Google Gemini), com uma suíte clínica para psicólogos e counselors: notas SOAP/DAP, prontuário CFP, formulação 5Ps, memória contínua do caso e anonimização LGPD feita no próprio aparelho.
 
----
-
-## 🚀 1. Como rodar agora no seu PC
-
-1. Instale as dependências (caso ainda não estejam instaladas):
-   ```bash
-   npm install
-   ```
-2. Inicie o servidor:
-   ```bash
-   npm start
-   ```
-3. Abra no navegador:
-   👉 **http://localhost:3000**
+Sem banco de dados: conversas e memórias de caso ficam no `localStorage` do dispositivo. O servidor só repassa cada mensagem ao provedor de IA e guarda as chaves.
 
 ---
 
-## 🔑 2. Como pegar sua Chave Gratuita (Sem Cartão de Crédito)
+## Arquitetura
 
-1. Acesse **[https://console.groq.com/keys](https://console.groq.com/keys)** e faça login com sua conta Google ou GitHub.
-2. Clique em **"Create API Key"**, dê um nome (ex: `ProjetoIA`) e copie a chave gerada (começa com `gsk_...`).
-3. Na tela do projeto (`http://localhost:3000`), clique no botão **"API / Config"** no topo (ou cole direto no arquivo `.env` na variável `GROQ_API_KEY`) e salve!
+| Camada | O que faz |
+|---|---|
+| `server.js` (Node ≥ 18 + Express) | Personas, regras clínicas, cascata de provedores, orçamento de contexto por modelo, resumo de reambientação, rate limit e cabeçalhos de segurança |
+| `public/` (PWA em JS puro) | Interface, streaming SSE, workspaces Clínica/Geral, memória do caso, ditado por voz, filtro de privacidade |
+| `public/pii.js` | Regras de anonimização usadas no navegador e nos testes |
+| `test-smoke.js` | Testes de fumaça sem gastar cota (provedores simulados) |
+
+Dependências de produção: `express`, `cors` e `dotenv`. Nada mais.
+
+### Provedores e cascata de fallback
+
+A ordem é **Groq → OpenRouter (só modelos `:free`) → Gemini**. Cada variável de chave aceita várias chaves separadas por vírgula, usadas em rodízio. Se um modelo responde 429, 5xx ou timeout, o servidor tenta o próximo modelo ou a próxima chave antes do primeiro byte da resposta, então o usuário nunca vê duas respostas misturadas.
+
+No compositor há um seletor de modelo: **Auto (Cascata Inteligente)** ou um modelo específico, agrupado por provedor.
+
+### Janela de contexto e auto-compactação
+
+Cada modelo tem seu orçamento:
+
+- **Janela ampla** (120 mil caracteres, até 2.500 tokens de resposta): Gemini 3 Flash, Gemma 4 31B, GPT-OSS 120B e Nemotron 3 Ultra.
+- **Janela padrão** (14 mil caracteres, até 1.500 tokens): os demais.
+
+Se o modelo escolhido falhar e a cascata cair num modelo menor, o contexto é recortado de novo para a janela dele.
+
+Quando a conversa passa de **75% da janela**, o app compacta sozinho: as mensagens antigas viram um **resumo de reambientação** (objetivo, fatos críticos, decisões e hipóteses, acordos, pendências e estado atual) e as **4 últimas mensagens seguem inteiras**. A tela continua mostrando a conversa completa, com um aviso no ponto do corte. O medidor `% ctx` no compositor mostra a ocupação estimada.
+
+### Personas (10)
+
+| Grupo | Personas |
+|---|---|
+| Geral | Assistente Geral, Dev Sênior, Professor, Resumidor, Tradutor |
+| Clínica | Notas SOAP / DAP, Prontuário CFP (Res. 01/2009), Formulação 5Ps & Psicoeducação, Briefing Pré-Sessão, Organizador de Caso e Metas |
+
+As personas clínicas seguem regras comuns: o julgamento clínico é do profissional, hipóteses ficam marcadas como tal, nada é inventado ("Não informado" quando falta dado) e qualquer indício de risco aparece no topo como **ATENÇÃO — RISCO**, destacado em vermelho na interface.
+
+### Privacidade e segurança
+
+- **Anonimização local (LGPD):** antes de sair do aparelho, o texto troca e-mails, telefones, CPF, RG, Cartão Nacional de Saúde (CNS), CEP e SSN por marcadores como `[CPF_OCULTO]`.
+- **Nomes do caso:** em *Memória do caso → Termos/nomes a ocultar*, liste nomes reais (`João Silva, Maria`). Eles viram `[CLIENTE_OCULTO]`, ou o pseudônimo que você definir com `=` (`João Silva=M.`).
+- **Prompt injection:** a memória do caso e o resumo vão dentro de `<memoria_caso>` e `<resumo_conversa>`, tratados pela IA só como dados.
+- **Servidor:** rate limit por IP, CORS configurável, chaves nunca devolvidas ao cliente, cabeçalhos `nosniff`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` e `Cross-Origin-Opener-Policy`, e CSP na página.
+
+O filtro pega padrões óbvios. Nomes que não estejam na lista do caso e endereços continuam passando, então revise antes de enviar.
 
 ---
 
-## 📱 3. Como escalar para Android com 0 Gastos
+## Rodar no PC
 
-O projeto já foi desenhado com layout mobile-first (`viewport-fit=cover`, suporte a safe-area do Android, `manifest.json` e `capacitor.config.json`). Você tem **2 caminhos gratuitos**:
+```bash
+npm install
+```
 
-### Caminho A: Instalar como App via PWA (Instantâneo, sem Android Studio)
-1. Hospede este projeto gratuitamente no **[Render.com](https://render.com)** (plano Free Web Service conectado ao seu GitHub).
-2. Abra o link pelo navegador Chrome do seu celular Android.
-3. Toque no menu do Chrome (`⋮`) e selecione **"Instalar aplicativo"** / **"Adicionar à tela inicial"**. Ele ficará instalado como um app nativo em tela cheia!
+```bash
+npm start
+```
 
-### Caminho B: Gerar um APK / AAB Nativo com Capacitor (Para publicar ou distribuir APK)
-Quando quiser gerar o pacote Android nativo:
+Abra **http://localhost:3000**. Sem nenhuma chave o app roda em **Modo Demo** (respostas simuladas).
+
+Para rodar os testes:
+
+```bash
+npm test
+```
+
+## Chaves gratuitas (sem cartão)
+
+Copie `.env.example` para `.env` e preencha pelo menos uma:
+
+- Groq: https://console.groq.com/keys → `GROQ_API_KEY`
+- OpenRouter: https://openrouter.ai/keys → `OPENROUTER_API_KEY`
+- Gemini: https://aistudio.google.com/apikey → `GEMINI_API_KEY`
+
+Também dá para colar chaves em *Configurações → Chaves e modelo*. Nesse caso elas ficam salvas só naquele aparelho.
+
+## Deploy na Vercel
+
+O `vercel.json` já está configurado.
+
+1. Importe o repositório na Vercel.
+2. Em *Settings → Environment Variables*, cadastre as chaves e também:
+   - `TRUST_PROXY=1`, para o rate limit ver o IP real do usuário;
+   - `ALLOWED_ORIGINS=https://seu-app.vercel.app`, mais `https://localhost` se for usar o APK.
+3. Faça o deploy. Cada push na branch principal publica uma versão nova.
+
+Na Vercel o servidor roda como função serverless, então o contador do rate limit pode zerar entre execuções.
+
+## Android
+
+- **PWA:** abra a URL publicada no Chrome do celular → menu `⋮` → *Instalar aplicativo*.
+- **APK (Capacitor):**
+
 ```bash
 npm install @capacitor/core @capacitor/cli @capacitor/android
+```
+
+```bash
 npx cap add android
+```
+
+```bash
 npx cap sync
+```
+
+```bash
 npx cap open android
 ```
-> **Dica para o APK:** Quando o app estiver rodando dentro do Android via Capacitor, basta hospedar o `server.js` gratuitamente no Render.com e colocar a URL dele no campo **"URL do Backend"** nas configurações (ou definir na constante de `public/app.js`), mantendo sua chave `GROQ_API_KEY` protegida no servidor!
+
+No app, informe a URL do backend em *Configurações → Chaves e modelo → URL do backend*.

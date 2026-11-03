@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="pt-BR" data-theme="dark" data-font="sans" data-accent="neutral">
+<html lang="pt-BR" data-theme="dark" data-font="sans" data-accent="green">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
-  <meta name="theme-color" content="#0d0d0d" />
+  <meta name="theme-color" content="#0c0e12" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src *; object-src 'none'; base-uri 'none'; form-action 'none'" />
@@ -23,6 +23,10 @@
         <button id="newChatBtn" class="icon-btn" title="Nova conversa" aria-label="Nova conversa">
           <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
         </button>
+      </div>
+      <div id="workspaceSwitch" class="segmented segmented-workspace" role="radiogroup" aria-label="Workspace">
+        <button type="button" data-workspace="counseling" role="radio">Clínica</button>
+        <button type="button" data-workspace="geral" role="radio">Geral</button>
       </div>
       <label class="search">
         <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
@@ -55,10 +59,6 @@
           <span id="apiStatusDot" class="status-dot" title="Status"></span>
           <span id="apiStatusText" class="status-text">Conectando</span>
           <button id="langBtn" class="chip-btn" title="Idioma da resposta e da voz" aria-label="Idioma da resposta e da voz">PT</button>
-          <button id="proBtn" class="chip-btn pro-btn" aria-pressed="false" title="Modo Pro: contexto longo (~30 mil tokens), prioriza Gemini">
-            <svg viewBox="0 0 24 24"><path d="M6 3h12l3 6-9 12L3 9z"/><path d="M3 9h18M12 21 8 9l4-6 4 6z"/></svg>
-            <span>Pro</span>
-          </button>
           <button id="memoryBtn" class="icon-btn" aria-expanded="false" title="Memória do caso" aria-label="Memória do caso">
             <svg viewBox="0 0 24 24"><path d="M6 3h11a2 2 0 0 1 2 2v16l-4-2-3 2-3-2-3 2V5a2 2 0 0 1 2-2Z"/><path d="M9 8h6M9 12h6"/></svg>
             <span id="memoryDot" class="dot-badge" hidden></span>
@@ -78,15 +78,20 @@
             <textarea id="caseMemoryInput" rows="4" maxlength="4000" placeholder="Cliente: &quot;M.&quot;, 34 anos. Meta: reduzir ansiedade social. Acordo: diário de pensamentos semanal."></textarea>
           </label>
           <label class="memory-field">
+            <span class="memory-title">Termos/nomes a ocultar neste caso</span>
+            <small class="muted">Trocados por [CLIENTE_OCULTO] antes do envio. Para um pseudônimo próprio use "=": João Silva=M., Maria=[MÃE]</small>
+            <input id="redactTermsInput" type="text" autocomplete="off" spellcheck="false" placeholder="João Silva, Maria" />
+          </label>
+          <label class="memory-field">
             <span class="memory-title">Resumo de longo prazo <span id="rollingSummaryCount" class="muted">0/3000</span></span>
-            <small class="muted">Gerado pela IA a partir da conversa. Você pode editar.</small>
-            <textarea id="rollingSummaryInput" rows="5" maxlength="3000" placeholder="Ainda não há resumo. Use o botão abaixo depois de algumas mensagens."></textarea>
+            <small class="muted">Gerado automaticamente quando a conversa enche a janela do modelo. Você pode editar.</small>
+            <textarea id="rollingSummaryInput" rows="5" maxlength="3000" placeholder="Ainda não há resumo. Ele é criado sozinho quando a conversa fica longa."></textarea>
           </label>
           <div class="memory-actions">
             <span id="memoryHint" class="muted"></span>
             <button id="summarizeBtn" class="secondary-btn">
               <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
-              <span>Atualizar resumo de longo prazo</span>
+              <span>Compactar contexto agora</span>
             </button>
           </div>
         </div>
@@ -104,10 +109,20 @@
       <footer class="composer-wrap">
         <div id="welcomeState" class="welcome">
           <h1 id="welcomeTitle">Como posso ajudar?</h1>
+          <p id="welcomeSubtitle" class="welcome-sub"></p>
         </div>
         <form id="chatForm" class="composer">
           <textarea id="userInput" rows="1" placeholder="Pergunte alguma coisa" autocomplete="off"></textarea>
           <div class="composer-actions">
+            <label class="model-picker" title="Modelo de IA">
+              <svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="3"/><path d="M9 1v4M15 1v4M9 19v4M15 19v4M1 9h4M1 15h4M19 9h4M19 15h4"/></svg>
+              <select id="modelSelect" aria-label="Modelo de IA"><option value="">Auto (Cascata Inteligente)</option></select>
+            </label>
+            <span id="contextMeter" class="context-meter" title="Ocupação estimada da janela de contexto do modelo">
+              <i class="cm-bar"><i id="contextMeterFill"></i></i><span id="contextMeterText">0% ctx</span>
+            </span>
+            <span class="composer-spacer"></span>
+            <span id="micTimer" class="mic-timer" hidden>00:00</span>
             <button type="button" id="micBtn" class="icon-btn" title="Ditar por voz" aria-label="Ditar por voz">
               <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>
             </button>
@@ -117,13 +132,8 @@
             </button>
           </div>
         </form>
-        <div class="suggestions">
-            <button class="suggestion" data-prompt="Explique de forma simples como funciona a inteligência artificial generativa.">Explicar IA generativa</button>
-            <button class="suggestion" data-persona="dev" data-prompt="Escreva uma função em JavaScript para validar e-mail e formatar CPF.">Validar CPF em JavaScript</button>
-            <button class="suggestion" data-persona="professor" data-prompt="Monte um plano de estudos de 4 semanas para criar apps Android.">Plano de estudos Android</button>
-            <button class="suggestion" data-persona="resumidor" data-prompt="Quais são as melhores técnicas de foco para estudar e programar?">Técnicas de foco</button>
-        </div>
-        <p class="disclaimer"><span id="piiBadge" class="pii-badge" title="Filtro de privacidade ativo: e-mails, telefones e documentos são ocultados antes do envio">
+        <div id="suggestions" class="suggestions"></div>
+        <p class="disclaimer"><span id="piiBadge" class="pii-badge" title="Filtro de privacidade ativo: e-mails, telefones, CPF, RG, CNS e CEP são ocultados antes do envio">
           <svg viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.4 8.3 8 9 4.6-.7 8-4 8-9V6z"/></svg>PII oculta</span>
           A IA pode errar. Confira informações importantes.</p>
       </footer>
@@ -200,7 +210,6 @@
         <label class="field"><span>OpenRouter</span><input type="password" id="openrouterKeyInput" placeholder="sk-or-..." autocomplete="off" /></label>
         <label class="field"><span>Gemini</span><input type="password" id="geminiKeyInput" placeholder="AIza..." autocomplete="off" /></label>
         <p class="hint">Ficam salvas só neste aparelho. Se o servidor já tem chaves no .env, deixe vazio.</p>
-        <label class="field"><span>Modelo preferido</span><select id="modelSelect"></select></label>
         <label class="field"><span>URL do backend (APK Android)</span><input type="url" id="backendUrlInput" placeholder="https://meu-app.vercel.app" /></label>
       </section>
 
@@ -212,7 +221,7 @@
         <label class="setting toggle-row">
           <span>
             <span class="setting-label">Filtro de privacidade (anonimizar PII)</span>
-            <small class="hint">Antes de enviar à nuvem, troca e-mails por [EMAIL_OCULTO], telefones por [TEL_OCULTO] e CPF/SSN por [DOC_OCULTO]. Pega só padrões óbvios: nomes e endereços continuam passando.</small>
+            <small class="hint">Antes de enviar à nuvem, oculta e-mails, telefones, CPF, RG, Cartão Nacional de Saúde (CNS), CEP e SSN (ex.: [CPF_OCULTO], [TEL_OCULTO]). Pega só padrões óbvios: nomes e endereços continuam passando.</small>
           </span>
           <input id="piiInput" type="checkbox" class="switch" checked />
         </label>
@@ -229,6 +238,7 @@
     </div>
   </div>
 
+  <script src="/pii.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>
