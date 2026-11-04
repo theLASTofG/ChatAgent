@@ -6,6 +6,8 @@ process.env.GEMINI_API_KEY = '';
 process.env.DEMO_DELAY_MS = '0';
 process.env.RATE_LIMIT_PER_MIN = '1000'; // o teste de rate limit baixa isso temporariamente
 process.env.ALLOWED_ORIGINS = '';
+process.env.SUPABASE_URL = '';
+process.env.SUPABASE_ANON_KEY = '';
 process.env.DEFAULT_MODEL = ''; // Auto puro: ordem dos provedores (não depende do .env local)
 
 const assert = require('assert');
@@ -64,6 +66,12 @@ function mockProviders() {
     assert.deepStrictEqual(data.providers.map((p) => p.id), ['groq', 'openrouter', 'gemini']);
     assert.ok(data.personas.some((p) => p.id === 'dev' && p.temperature === 0.2));
     assert.ok(!/gsk_|sk-or-|AIza/.test(JSON.stringify(data)));
+  });
+
+  await test('GET /api/status: login Supabase desligado sem env e sem segredos', async () => {
+    const data = await (await realFetch(`${base}/api/status`)).json();
+    assert.deepStrictEqual(data.auth, { enabled: false });
+    assert.ok(!/service_role/i.test(JSON.stringify(data)));
   });
 
   await test('GET / serve a interface', async () => {

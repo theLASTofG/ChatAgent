@@ -614,6 +614,13 @@ function contextMeta(ctx) {
 // ---------------------------------------------------------------------------
 // Rotas
 // ---------------------------------------------------------------------------
+function publicAuthConfig() {
+  const supabaseUrl = String(process.env.SUPABASE_URL || '').trim();
+  const supabaseAnonKey = String(process.env.SUPABASE_ANON_KEY || '').trim();
+  if (!/^https:\/\/[\w.-]+$/.test(supabaseUrl.replace(/\/+$/, '')) || !supabaseAnonKey) return { enabled: false };
+  return { enabled: true, provider: 'google', supabaseUrl, supabaseAnonKey };
+}
+
 app.get('/api/status', (req, res) => {
   const keys = resolveKeys({});
   const providers = PROVIDERS.map((p) => ({
@@ -630,7 +637,10 @@ app.get('/api/status', (req, res) => {
     personas: Object.entries(PERSONAS).map(([id, p]) => ({ id, name: p.name, group: p.group, temperature: p.temperature })),
     budgets: MODEL_BUDGETS,
     compactThreshold: COMPACT_THRESHOLD,
-    maxContextChars: MODEL_BUDGETS.standard.maxContextChars
+    maxContextChars: MODEL_BUDGETS.standard.maxContextChars,
+    // Login opcional: a anon key do Supabase é pública por design (protegida por RLS).
+    // Nunca exponha aqui a service_role key.
+    auth: publicAuthConfig()
   });
 });
 

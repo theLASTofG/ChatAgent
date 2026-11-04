@@ -102,6 +102,9 @@ const el = {
   form: $('chatForm'), input: $('userInput'), send: $('sendBtn'), mic: $('micBtn'),
   modal: $('settingsModal'), openSettings: $('openSettingsBtn'), closeSettings: $('closeSettingsBtn'),
   saveSettings: $('saveSettingsBtn'), feedback: $('settingsFeedback'),
+  accountBox: $('accountBox'), loginBtn: $('loginBtn'), logoutBtn: $('logoutBtn'), accountProfile: $('accountProfile'),
+  accountAvatar: $('accountAvatar'), accountName: $('accountName'), accountEmail: $('accountEmail'),
+  exportBackupBtn: $('exportBackupBtn'), importBackupBtn: $('importBackupBtn'), importBackupInput: $('importBackupInput'), backupFeedback: $('backupFeedback'),
   groqKey: $('groqKeyInput'), orKey: $('openrouterKeyInput'), geminiKey: $('geminiKeyInput'),
   sysPrompt: $('systemPromptInput'), backendUrl: $('backendUrlInput'),
   fontSize: $('fontSizeInput'), fontSizeValue: $('fontSizeValue'), motion: $('motionInput'),
@@ -380,15 +383,136 @@ function exportThread(id) {
     .concat(memory)
     .concat(t.messages.map((m) => `## ${m.role === 'user' ? 'Você' : 'IA'}\n\n${m.content}\n`))
     .join('\n');
-  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+  downloadFile(`${t.title.replace(/[^\wÀ-ſ -]+/g, '').trim().slice(0, 40) || 'conversa'}.md`, md, 'text/markdown;charset=utf-8');
+}
+
+function downloadFile(name, content, type) {
+  const blob = new Blob([content], { type });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `${t.title.replace(/[^\wÀ-ſ -]+/g, '').trim().slice(0, 40) || 'conversa'}.md`;
+  a.download = name;
   document.body.appendChild(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
+
+// ---------------------------------------------------------------------------
+// Exportação clínica (SOAP, CFP, 5Ps): texto limpo para o prontuário oficial
+// ---------------------------------------------------------------------------
+const CLINICAL_EXPORT = new Set(['soap_notes', 'cfp_record', 'case_formulation']);
+
+// Pseudônimo do caso: alias de "Termos a ocultar" (Nome=M.) ou 1º nome entre aspas na memória
+function casePseudonym(t) {
+  const terms = window.PII?.parseTerms ? window.PII.parseTerms(t.redactTerms || '') : [];
+  const alias = terms.map((x) => x.alias).find((a) => a && !/^\[.*\]$/.test(a));
+  if (alias) return alias;
+  const quoted = String(t.caseMemory || '').match(/["“]([^"”]{1,30})["”]/);
+  return quoted ? quoted[1].trim() : 'Caso sem pseudônimo';
+}
+
+// Remove marcadores de markdown e frases de cortesia da IA, preservando a estrutura de linhas
+function clinicalPlainText(md) {
+  const lines = String(md).replace(/\r/g, '').replace(/```[a-z]*\n?/gi, '').split('\n').map((l) => l
+    .replace(/^#{1,6}\s+/, '')
+    .replace(/^>\s?/, '')
+    .replace(/^(\s*)[*+]\s+/, '$1- ')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/(^|[^*\w])\*([^*\n]+)\*/g, '$1$2')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/^\s*(-{3,}|\*{3,}|_{3,})\s*$/, '')
+    .replace(/\s+$/, ''));
+  const intro = /^(claro|certo|perfeito|ótimo|aqui está|aqui estão|segue|seguem|com certeza)\b.*[:!.]$/i;
+  const outro = /^(espero (ter ajudado|que)|se precisar|posso ajudar|quer que eu|deseja que eu)/i;
+  while (lines.length && (!lines[0].trim() || intro.test(lines[0].trim()))) lines.shift();
+  while (lines.length && (!lines[lines.length - 1].trim() || outro.test(lines[lines.length - 1].trim()))) lines.pop();
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function clinicalRecord(t, msg, format) {
+  const persona = personas.find((p) => p.id === t.persona);
+  const model = persona ? persona.name : t.persona;
+  const when = new Date(t.updatedAt || Date.now());
+  const stamp = when.toLocaleString('pt-BR');
+  const pseudo = casePseudonym(t);
+  const note = 'Rascunho gerado com apoio de IA. Revisar antes de incluir no prontuário.';
+  const lines = format === 'md'
+    ? [`# Registro clínico — ${pseudo}`, '', `- **Caso:** ${pseudo}`, `- **Modelo de registro:** ${model}`, `- **Data/hora:** ${stamp}`, '', '---', '', msg.content.trim(), '', '---', `_${note}_`]
+    : [`REGISTRO CLÍNICO — ${pseudo}`, `Modelo de registro: ${model}`, `Data/hora: ${stamp}`, '', clinicalPlainText(msg.content), '', note];
+  const pad = (n) => String(n).padStart(2, '0');
+  const fileStamp = `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())}_${pad(when.getHours())}${pad(when.getMinutes())}`;
+  const slug = pseudo.replace(/[^\wÀ-ſ-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) || 'caso';
+  return { name: `registro_${slug}_${fileStamp}.${format}`, content: lines.join('\n') + '\n' };
+}
+
+function exportBar() {
+  const bar = document.createElement('div');
+  bar.className = 'export-bar';
+  bar.setAttribute('role', 'group');
+  bar.setAttribute('aria-label', 'Exportar registro clínico');
+  const mk = (action, icon, label, title) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'export-btn';
+    b.dataset.action = action;
+    b.title = title;
+    b.innerHTML = `${ICON[icon]}<span>${label}</span>`;
+    return b;
+  };
+  bar.append(
+    mk('clin-copy', 'copy', 'Copiar formatado', 'Copiar texto limpo para o prontuário eletrônico'),
+    mk('clin-txt', 'download', '.txt', 'Baixar registro em texto'),
+    mk('clin-md', 'download', '.md', 'Baixar registro em Markdown')
+  );
+  return bar;
+}
+
+// ---------------------------------------------------------------------------
+// Backup e restauração (JSON local)
+// ---------------------------------------------------------------------------
+const BACKUP_KIND = 'ia-respostas-backup';
+
+function exportBackup() {
+  saveThreads();
+  const data = { kind: BACKUP_KIND, version: 1, exportedAt: new Date().toISOString(), threads: store.get('ia.threads', []), active: activeId };
+  if (!data.threads.length) return setBackupFeedback('Nada para exportar ainda');
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  downloadFile(`ia-backup_${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.json`, JSON.stringify(data, null, 2), 'application/json');
+  setBackupFeedback(`${data.threads.length} conversa(s) exportada(s). Chaves de API não são incluídas.`);
+}
+
+function validThread(t) {
+  return t && typeof t.id === 'string' && Array.isArray(t.messages) &&
+    t.messages.every((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string');
+}
+
+async function importBackup(file) {
+  let data;
+  try { data = JSON.parse(await file.text()); } catch { return setBackupFeedback('Arquivo inválido: não é um JSON'); }
+  if (!data || data.kind !== BACKUP_KIND || !Array.isArray(data.threads)) return setBackupFeedback('Arquivo não é um backup do IA de Respostas');
+  const incoming = data.threads.filter(validThread);
+  const byId = new Map(threads.map((t) => [t.id, t]));
+  let added = 0, updated = 0;
+  for (const raw of incoming) {
+    const t = {
+      title: 'Conversa importada', caseMemory: '', rollingSummary: '', redactTerms: '', summarizedUpTo: 0, compactedAt: 0, needsSummary: false,
+      ...raw, title: String(raw.title || 'Conversa importada'), updatedAt: Number(raw.updatedAt) || Date.now(),
+      messages: raw.messages.map(({ pending, ...m }) => m)
+    };
+    const cur = byId.get(t.id);
+    if (!cur) { threads.push(t); byId.set(t.id, t); added++; }
+    else if (t.updatedAt > (cur.updatedAt || 0)) { Object.assign(cur, t); updated++; }
+  }
+  threads.sort((a, b) => b.updatedAt - a.updatedAt);
+  saveThreads();
+  renderAll();
+  setBackupFeedback(`Restaurado: ${added} nova(s), ${updated} atualizada(s)` + (incoming.length < data.threads.length ? `, ${data.threads.length - incoming.length} ignorada(s)` : ''));
+}
+
+function setBackupFeedback(text) { el.backupFeedback.textContent = text; }
 
 // ===========================================================================
 // Renderização
@@ -404,12 +528,19 @@ function iconButton(icon, action, label) {
   return b;
 }
 
+// Texto pesquisável: título, persona (id, nome e tag), memória do caso, termos/pseudônimos, resumo e mensagens
+function threadHaystack(t) {
+  const p = personas.find((x) => x.id === t.persona);
+  return [t.title, t.persona, p?.name, PERSONA_TAG[t.persona], t.caseMemory, t.redactTerms, t.rollingSummary, ...t.messages.map((m) => m.content)]
+    .filter(Boolean).join('\n').toLowerCase();
+}
+
 function renderThreadList() {
   const q = el.search.value.trim().toLowerCase();
   el.threadList.textContent = '';
   const items = threads
     .filter((t) => t.messages.length || t.caseMemory || t.rollingSummary)
-    .filter((t) => !q || t.title.toLowerCase().includes(q) || t.messages.some((m) => m.content.toLowerCase().includes(q)))
+    .filter((t) => !q || threadHaystack(t).includes(q))
     .sort((a, b) => b.updatedAt - a.updatedAt);
   if (!items.length) {
     const li = document.createElement('li');
@@ -548,6 +679,7 @@ function messageNode(m, index, isLast) {
       meta.textContent = metaLabel(m);
       bar.appendChild(meta);
     }
+    if (m.role === 'assistant' && m.content && !m.meta?.error && CLINICAL_EXPORT.has(activeThread()?.persona)) wrap.appendChild(exportBar());
     wrap.appendChild(bar);
   }
   return wrap;
@@ -950,6 +1082,14 @@ async function sendMessage(text, { regenerate = false } = {}) {
     saveThreads();
     if (thread.id === activeId) { renderMessages(); renderMemory(); updateContextMeter(); }
     renderThreadList();
+    // Só contadores agregados (nunca conteúdo) e só se logado; no modo local é no-op
+    if (!reply.meta.error && !reply.meta.stopped) {
+      window.Auth?.trackUsage({
+        chats: 1,
+        clinicalNotes: CLINICAL_EXPORT.has(thread.persona) ? 1 : 0,
+        tokens: thread.messages.reduce((n, m) => n + m.content.length, 0) / 4
+      });
+    }
     // Janela perto do limite (~75%) ou já cortando: compacta em segundo plano
     if (!reply.meta.error && (reply.meta.compactSuggested || reply.meta.trimmedCount > 0)) compactThread(thread);
   }
@@ -1097,6 +1237,32 @@ async function loadStatus() {
   updateStatusUi();
   fillModels();
   renderAll();
+  initAccount();
+}
+
+// ===========================================================================
+// Conta opcional (Supabase + Google). Sem config, nada muda: modo local.
+// ===========================================================================
+let accountWired = false;
+async function initAccount() {
+  if (!window.Auth || !serverStatus?.auth?.enabled) return;
+  if (!(await window.Auth.init(serverStatus.auth))) return;
+  el.accountBox.hidden = false;
+  if (accountWired) return;
+  accountWired = true;
+  window.Auth.onAuthStateChange(renderAccount);
+}
+
+function renderAccount() {
+  const user = window.Auth?.currentUser();
+  el.loginBtn.hidden = Boolean(user);
+  el.accountProfile.hidden = !user;
+  if (!user) return;
+  const initials = String(user.name || user.email || '?').trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
+  el.accountAvatar.textContent = initials || '?';
+  el.accountName.textContent = user.name || 'Conta Google';
+  el.accountEmail.textContent = user.email || '';
+  el.accountProfile.title = user.email || '';
 }
 
 function updateStatusUi() {
@@ -1246,6 +1412,18 @@ el.bannerBtn.addEventListener('click', () => openSettings('api'));
 el.closeSettings.addEventListener('click', closeSettings);
 el.modal.addEventListener('click', (e) => { if (e.target === el.modal) closeSettings(); });
 el.saveSettings.addEventListener('click', saveSettings);
+el.exportBackupBtn.addEventListener('click', exportBackup);
+el.loginBtn.addEventListener('click', () => {
+  window.Auth?.loginWithGoogle().catch((err) => toast(err.message || 'Não foi possível entrar'));
+});
+el.logoutBtn.addEventListener('click', () => {
+  window.Auth?.logout().then(() => toast('Você saiu. Os dados locais continuam neste aparelho.'), () => toast('Não foi possível sair'));
+});
+el.importBackupBtn.addEventListener('click', () => el.importBackupInput.click());
+el.importBackupInput.addEventListener('change', () => {
+  const f = el.importBackupInput.files[0];
+  if (f) importBackup(f).finally(() => { el.importBackupInput.value = ''; });
+});
 document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => showTab(t.dataset.tab)));
 
 // Aparência aplica na hora (prévia ao vivo), sem precisar salvar
@@ -1275,6 +1453,20 @@ el.list.addEventListener('click', (e) => {
   if (btn.dataset.action === 'copy') copyText(msg.content).then(() => flashCopied(btn));
   else if (btn.dataset.action === 'speak') speak(msg.content, btn);
   else if (btn.dataset.action === 'regen') regenerate();
+  else if (btn.dataset.action === 'clin-copy') {
+    copyText(clinicalPlainText(msg.content)).then(() => {
+      const label = btn.querySelector('span');
+      btn.classList.add('done');
+      btn.querySelector('svg').outerHTML = ICON.check;
+      label.textContent = 'Copiado!';
+      clearTimeout(btn._t);
+      btn._t = setTimeout(() => { btn.classList.remove('done'); btn.querySelector('svg').outerHTML = ICON.copy; label.textContent = 'Copiar formatado'; }, 1600);
+    });
+  } else if (btn.dataset.action === 'clin-txt' || btn.dataset.action === 'clin-md') {
+    const fmt = btn.dataset.action === 'clin-md' ? 'md' : 'txt';
+    const rec = clinicalRecord(activeThread(), msg, fmt);
+    downloadFile(rec.name, rec.content, fmt === 'md' ? 'text/markdown;charset=utf-8' : 'text/plain;charset=utf-8');
+  }
 });
 
 document.addEventListener('keydown', (e) => {

@@ -6,9 +6,12 @@
   <meta name="theme-color" content="#0c0e12" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src *; object-src 'none'; base-uri 'none'; form-action 'none'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self'; img-src 'self' data:; connect-src *; object-src 'none'; base-uri 'none'; form-action 'none'" />
   <title>IA de Respostas</title>
   <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
   <link rel="stylesheet" href="/styles.css" />
   <script src="/theme-boot.js"></script>
 </head>
@@ -30,11 +33,28 @@
       </div>
       <label class="search">
         <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-        <input id="threadSearch" type="search" placeholder="Buscar conversas" />
+        <input id="threadSearch" type="search" placeholder="Buscar por título, persona ou pseudônimo" aria-label="Buscar conversas" autocomplete="off" spellcheck="false" />
       </label>
       <div class="sidebar-label">Recentes</div>
       <ul id="threadList" class="thread-list"></ul>
       <div class="sidebar-foot">
+        <!-- Conta opcional (Supabase + Google). Fica oculta se o servidor não tiver SUPABASE_URL/ANON_KEY. -->
+        <div id="accountBox" class="account" hidden>
+          <button type="button" id="loginBtn" class="sidebar-row account-login" title="Opcional: sem login tudo continua salvo só neste aparelho">
+            <svg viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5"/><path d="M15 12H3"/></svg>
+            <span>Entrar com Google</span>
+          </button>
+          <div id="accountProfile" class="account-profile" hidden>
+            <span id="accountAvatar" class="account-avatar" aria-hidden="true"></span>
+            <span class="account-id">
+              <span id="accountName" class="account-name"></span>
+              <span id="accountEmail" class="account-email"></span>
+            </span>
+            <button type="button" id="logoutBtn" class="icon-btn" title="Sair da conta" aria-label="Sair da conta">
+              <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
+            </button>
+          </div>
+        </div>
         <button id="openSettingsBtn" class="sidebar-row">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
           <span>Configurações</span>
@@ -153,6 +173,7 @@
         <button class="tab active" data-tab="appearance" role="tab">Aparência</button>
         <button class="tab" data-tab="api" role="tab">Chaves e modelo</button>
         <button class="tab" data-tab="behavior" role="tab">Comportamento</button>
+        <button class="tab" data-tab="backup" role="tab">Backup</button>
       </div>
 
       <section class="tab-panel" data-panel="appearance">
@@ -231,6 +252,26 @@
         </div>
       </section>
 
+      <section class="tab-panel" data-panel="backup" hidden>
+        <div class="setting">
+          <div class="setting-label">Backup local (JSON)</div>
+          <p class="hint">Exporta conversas, memórias fixas, termos ocultos e resumos deste aparelho. Chaves de API não entram no arquivo. Guarde-o em local seguro: ele contém dados clínicos.</p>
+          <div class="backup-actions">
+            <button type="button" id="exportBackupBtn" class="secondary-btn">
+              <svg viewBox="0 0 24 24"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
+              <span>Exportar backup</span>
+            </button>
+            <button type="button" id="importBackupBtn" class="secondary-btn">
+              <svg viewBox="0 0 24 24"><path d="M12 20V9"/><path d="m7 14 5-5 5 5"/><path d="M5 4h14"/></svg>
+              <span>Importar backup</span>
+            </button>
+            <input type="file" id="importBackupInput" accept="application/json,.json" hidden />
+          </div>
+          <p class="hint">Importar mescla com o que já existe: nada é apagado. Se a mesma conversa existir nos dois, fica a versão mais recente.</p>
+          <p id="backupFeedback" class="feedback" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+
       <div class="dialog-foot">
         <span id="settingsFeedback" class="feedback"></span>
         <button id="saveSettingsBtn" class="primary-btn">Salvar</button>
@@ -239,6 +280,7 @@
   </div>
 
   <script src="/pii.js"></script>
+  <script src="/auth.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

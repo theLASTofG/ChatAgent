@@ -1,12 +1,16 @@
-const CACHE_NAME = 'ia-respostas-v5';
+const CACHE_NAME = 'ia-respostas-v7';
 const ASSETS = [
   '/',
   '/index.html',
   '/styles.css',
   '/pii.js',
   '/app.js',
+  '/auth.js',
   '/theme-boot.js',
-  '/manifest.json'
+  '/manifest.json',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/apple-touch-icon.png'
 ];
 
 self.addEventListener('install', (event) => {

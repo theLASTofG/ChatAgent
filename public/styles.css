@@ -630,3 +630,40 @@ input[type="range"] { width: 100%; accent-color: var(--text); }
   .model-picker { max-width: 46vw; }
   .cm-bar { display: none; }
 }
+
+/* ---- Sprint 4: exportação clínica e backup ---- */
+.export-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border);
+}
+.export-btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+  font: inherit; font-size: 0.78rem; font-weight: 500; color: var(--text-2); cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.export-btn:hover { background: var(--surface-hover); color: var(--text); border-color: var(--border-strong); }
+.export-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent); }
+.export-btn svg { width: 14px; height: 14px; }
+.export-btn.done { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+.backup-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+#backupFeedback { margin: 8px 0 0; min-height: 1.2em; }
+
+/* ---- Sprint 4.1: conta opcional (Google via Supabase) ---- */
+.account { margin-bottom: 4px; }
+.account-login { width: 100%; color: var(--text-2); }
+.account-login:hover { color: var(--text); }
+.account-profile {
+  display: flex; align-items: center; gap: 10px; padding: 6px 4px 6px 10px;
+  border-radius: 10px; border: 1px solid var(--border); background: var(--surface);
+}
+.account-avatar {
+  flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 0.75rem; font-weight: 600;
+  color: var(--accent); background: var(--accent-soft);
+}
+.account-id { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.25; }
+.account-name { font-size: 0.84rem; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-email { font-size: 0.74rem; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-profile .icon-btn { width: 30px; height: 30px; }
+.account-profile .icon-btn svg { width: 16px; height: 16px; }
