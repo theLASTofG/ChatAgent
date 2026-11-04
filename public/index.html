@@ -239,6 +239,16 @@
           <textarea id="systemPromptInput" rows="5" placeholder="Ex.: Responda de forma curta e me chame pelo nome."></textarea>
         </label>
         <p class="hint">Quando preenchido, substitui o comportamento da persona escolhida.</p>
+        <label class="field"><span>Ao voltar ao app, abrir conversa nova</span>
+          <select id="freshChatSelect">
+            <option value="30">Depois de 30 min sem uso (padrão)</option>
+            <option value="120">Depois de 2 horas sem uso</option>
+            <option value="480">Depois de 8 horas sem uso</option>
+            <option value="0">Sempre que abrir o app</option>
+            <option value="never">Nunca (continuar a última conversa)</option>
+          </select>
+        </label>
+        <p class="hint">A conversa anterior continua no histórico, com a memória do caso. A nova mantém a persona que você estava usando.</p>
         <label class="setting toggle-row">
           <span>
             <span class="setting-label">Filtro de privacidade (anonimizar PII)</span>

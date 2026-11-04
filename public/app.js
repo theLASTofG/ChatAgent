@@ -76,7 +76,7 @@ const VOICE_LANG = { pt: 'pt-BR', en: 'en-US' };
 const settings = Object.assign(
   {
     keys: { groq: '', openrouter: '', gemini: '' }, systemPrompt: '', backendUrl: '', model: '', sidebarClosed: false,
-    lang: 'pt', pii: true, workspace: 'counseling'
+    lang: 'pt', pii: true, workspace: 'counseling', freshChatAfter: '30'
   },
   store.get('ia.settings', {})
 );
@@ -111,7 +111,7 @@ const el = {
   langBtn: $('langBtn'), memoryBtn: $('memoryBtn'), memoryDot: $('memoryDot'),
   memoryPanel: $('memoryPanel'), caseMemory: $('caseMemoryInput'), rollingSummary: $('rollingSummaryInput'),
   caseMemoryCount: $('caseMemoryCount'), rollingSummaryCount: $('rollingSummaryCount'),
-  summarizeBtn: $('summarizeBtn'), memoryHint: $('memoryHint'), pii: $('piiInput'), piiBadge: $('piiBadge'),
+  summarizeBtn: $('summarizeBtn'), memoryHint: $('memoryHint'), pii: $('piiInput'), freshChat: $('freshChatSelect'), piiBadge: $('piiBadge'),
   redactTerms: $('redactTermsInput'), workspace: $('workspaceSwitch'), suggestions: $('suggestions'),
   welcomeSub: $('welcomeSubtitle'), meter: $('contextMeter'), meterFill: $('contextMeterFill'),
   meterText: $('contextMeterText'), micTimer: $('micTimer')
@@ -767,6 +767,31 @@ function setWorkspace(ws) {
 }
 
 // Conversa ainda vazia assume a persona padrão do workspace, se for de outro grupo
+// ---------------------------------------------------------------------------
+// Conversa nova ao voltar: depois de um tempo sem uso o app abre vazio (como o
+// ChatGPT/Claude), mas um recarregar rápido ou trocar de aba não perde o fio.
+// ---------------------------------------------------------------------------
+function freshChatAfterMs() {
+  const v = settings.freshChatAfter ?? '30';
+  return v === 'never' ? Infinity : Math.max(0, Number(v) || 0) * 60000;
+}
+
+function markSeen() { store.set('ia.lastSeen', Date.now()); }
+
+// onResume: app voltou do segundo plano (aba/PWA). "Sempre" vale só para abertura.
+function maybeStartFresh({ onResume = false } = {}) {
+  const ttl = freshChatAfterMs();
+  if (ttl === Infinity || (onResume && ttl === 0)) return false;
+  const t = activeThread();
+  if (!t || !t.messages.length || busy || el.input.value.trim()) return false;
+  const last = Math.max(t.updatedAt || 0, store.get('ia.lastSeen', 0));
+  if (ttl && Date.now() - last < ttl) return false;
+  createThread(t.persona);
+  dropEmptyThreads();
+  saveThreads();
+  return true;
+}
+
 function alignEmptyThread() {
   const t = activeThread();
   if (t && t.messages.length) return;
@@ -1302,6 +1327,7 @@ function openSettings(tab = 'appearance') {
   el.sysPrompt.value = settings.systemPrompt || '';
   el.backendUrl.value = settings.backendUrl || '';
   el.pii.checked = settings.pii;
+  el.freshChat.value = String(settings.freshChatAfter ?? '30');
   el.feedback.textContent = '';
   syncAppearanceControls();
   showTab(tab);
@@ -1322,6 +1348,7 @@ function saveSettings() {
   settings.systemPrompt = el.sysPrompt.value.trim();
   settings.backendUrl = url;
   settings.pii = el.pii.checked;
+  settings.freshChatAfter = el.freshChat.value;
   saveSettingsStore();
   renderModeControls();
   closeSettings();
@@ -1480,7 +1507,21 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
 
+maybeStartFresh();
+markSeen();
 alignEmptyThread();
 renderModeControls();
 renderAll();
 loadStatus();
+
+// Marca a última vez em que o app esteve visível; ao voltar, decide se abre conversa nova
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') return markSeen();
+  if (maybeStartFresh({ onResume: true })) {
+    closeSettings();
+    renderAll();
+    toast('Conversa nova. A anterior está no histórico.');
+  }
+  markSeen();
+});
+window.addEventListener('pagehide', markSeen);
