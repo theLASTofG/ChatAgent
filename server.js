@@ -26,7 +26,7 @@ const PROVIDERS = [
     name: 'OpenRouter (Free)',
     url: 'https://openrouter.ai/api/v1/chat/completions',
     envKey: 'OPENROUTER_API_KEY',
-    extraHeaders: { 'HTTP-Referer': 'https://github.com/projeto-ia', 'X-Title': 'IA de Respostas' },
+    extraHeaders: { 'HTTP-Referer': 'https://github.com/projeto-ia', 'X-Title': 'Klimbo' },
     models: [
       { id: 'google/gemma-4-26b-a4b-it:free', name: 'Gemma 4 26B (OR Free)', badge: 'Free' },
       { id: 'nvidia/nemotron-3-ultra-550b-a55b:free', name: 'Nemotron 3 Ultra 550B', badge: 'Raciocínio', window: 'wide' },
@@ -889,7 +889,7 @@ if (require.main === module) {
   app.listen(PORT, () => {
     const keys = resolveKeys({});
     const pools = PROVIDERS.map((p) => `${p.id}: ${keys[p.id].length}`).join(' · ');
-    console.log(`\n🚀 Servidor IA de Respostas rodando em: http://localhost:${PORT}`);
+    console.log(`\n🚀 Servidor Klimbo rodando em: http://localhost:${PORT}`);
     console.log(`🧠 Modo: ${isDemo(keys) ? 'DEMO (nenhuma chave no .env)' : `Provedores reais com fallback (chaves — ${pools})`}`);
   });
 }

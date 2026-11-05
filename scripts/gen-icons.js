@@ -20,7 +20,7 @@ function png(size, rgba) {
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0))]);
 }
 
-// Glifo "IA" em coordenadas normalizadas (0..1), dentro da zona segura maskable (círculo de 80%)
+// Glifo em coordenadas normalizadas (0..1), dentro da zona segura maskable (círculo de 80%)
 const inQuad = (x, y, q) => { // polígono convexo
   let sign = 0;
   for (let i = 0; i < q.length; i++) {
@@ -31,14 +31,18 @@ const inQuad = (x, y, q) => { // polígono convexo
   }
   return true;
 };
-const T = 0.30, B = 0.70, W = 0.085; // topo, base, espessura
+// Monograma "K" do Klimbo: haste + braço e perna diagonais, cortados no topo/base
+const T = 0.28, B = 0.72, W = 0.105; // topo, base, espessura
+const bar = (x1, y1, x2, y2, w) => { // segmento grosso como quadrilátero convexo
+  const len = Math.hypot(x2 - x1, y2 - y1), nx = (-(y2 - y1) / len) * w / 2, ny = ((x2 - x1) / len) * w / 2;
+  return [[x1 + nx, y1 + ny], [x2 + nx, y2 + ny], [x2 - nx, y2 - ny], [x1 - nx, y1 - ny]];
+};
 const shapes = [
-  [[0.25, T], [0.25 + W, T], [0.25 + W, B], [0.25, B]],                       // I
-  [[0.555, T], [0.555 + W, T], [0.44 + W * 0.2, B], [0.44 - W * 0.8, B]].map(([x, y]) => [x + 0.03, y]), // A perna esq.
-  [[0.555, T], [0.555 + W, T], [0.76, B], [0.76 - W, B]].map(([x, y]) => [x + 0.03, y]),               // A perna dir.
-  [[0.49, 0.565], [0.70, 0.565], [0.70, 0.565 + W * 0.85], [0.49, 0.565 + W * 0.85]]                  // A travessa
+  [[0.32, T], [0.32 + W, T], [0.32 + W, B], [0.32, B]], // haste
+  bar(0.40, 0.54, 0.70, 0.22, W),                       // braço superior
+  bar(0.49, 0.45, 0.73, 0.78, W * 1.05)                 // perna inferior
 ];
-const glyph = (x, y) => shapes.some((s) => inQuad(x, y, s));
+const glyph = (x, y) => y >= T && y <= B && shapes.some((s) => inQuad(x, y, s));
 
 function render(size) {
   const out = Buffer.alloc(size * size * 4);

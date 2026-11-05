@@ -1,6 +1,6 @@
-# IA de Respostas — Copiloto Clínico e Assistente Geral (custo zero)
+# Klimbo — Copiloto Clínico & Assistente (custo zero)
 
-Chat de IA para web e Android que usa **só APIs gratuitas** (Groq, OpenRouter e Google Gemini), com uma suíte clínica para psicólogos e counselors: notas SOAP/DAP, prontuário CFP, formulação 5Ps, memória contínua do caso e anonimização LGPD feita no próprio aparelho.
+**Klimbo** é um chat de IA para web e Android que usa **só APIs gratuitas** (Groq, OpenRouter e Google Gemini), com uma suíte clínica para psicólogos e counselors: notas SOAP/DAP, prontuário CFP, formulação 5Ps, memória contínua do caso e anonimização LGPD feita no próprio aparelho.
 
 Sem banco de dados: conversas e memórias de caso ficam no `localStorage` do dispositivo. O servidor só repassa cada mensagem ao provedor de IA e guarda as chaves.
 
@@ -51,6 +51,14 @@ As personas clínicas seguem regras comuns: o julgamento clínico é do profissi
 - **Servidor:** rate limit por IP, CORS configurável, chaves nunca devolvidas ao cliente, cabeçalhos `nosniff`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` e `Cross-Origin-Opener-Policy`, e CSP na página.
 
 O filtro pega padrões óbvios. Nomes que não estejam na lista do caso e endereços continuam passando, então revise antes de enviar.
+
+### Conta opcional (Google) e painel do admin
+
+Sem login, o Klimbo funciona 100% local e offline. Para liberar **Entrar com Google**, rode `schema.sql` no SQL Editor do Supabase, ative o provedor Google em *Authentication → Providers* e defina `SUPABASE_URL` e `SUPABASE_ANON_KEY` (nunca a `service_role`) no `.env` ou na Vercel.
+
+- **Contadores:** cada resposta soma conversas, documentações clínicas (SOAP, CFP, 5Ps) e tokens estimados em `usage_counters`. Nenhum conteúdo clínico sai do aparelho.
+- **Painel do Klimbo:** o botão aparece na barra lateral só para contas com `role = 'admin'`. Ele mostra profissionais cadastrados, conversas, documentações clínicas e tokens processados, todos via `admin_usage_totals()`, que devolve só totais e recusa quem não é admin. Para promover a primeira conta, rode no Supabase: `update public.profiles set role = 'admin' where email = 'voce@exemplo.com';`
+- **Falhas de login** (cancelamento no Google, rede, timeout, SDK bloqueado) viram um aviso em amarelo. O app não trava e os dados locais continuam intactos.
 
 ---
 

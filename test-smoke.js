@@ -430,6 +430,58 @@ function mockProviders() {
     }
   });
 
+  await test('Marca Klimbo: título, manifest, sidebar e boas-vindas', async () => {
+    const html = await (await realFetch(`${base}/`)).text();
+    assert.ok(html.includes('<title>Klimbo — Copiloto Clínico &amp; Assistente</title>') || html.includes('<title>Klimbo — Copiloto Clínico & Assistente</title>'));
+    assert.ok(html.includes('class="brand-name">Klimbo<'), 'marca no topo da sidebar');
+    assert.ok(/<h1 id="welcomeTitle">[^<]*<span class="brand-word">Klimbo<\/span>/.test(html), 'Klimbo no h1#welcomeTitle');
+    assert.ok(!html.includes('IA de Respostas'));
+    const manifest = await (await realFetch(`${base}/manifest.json`)).json();
+    assert.strictEqual(manifest.short_name, 'Klimbo');
+    assert.ok(manifest.name.startsWith('Klimbo'));
+    const js = await (await realFetch(`${base}/app.js`)).text();
+    assert.ok(js.includes("'ia-respostas-backup'"), 'backups antigos continuam importáveis');
+  });
+
+  await test('Painel admin: botão oculto por padrão e só RPCs agregadas', async () => {
+    const html = await (await realFetch(`${base}/`)).text();
+    assert.ok(/<button[^>]*id="adminBtn"[^>]*hidden/.test(html), 'adminBtn nasce oculto');
+    assert.ok(/<div id="adminModal" class="modal" hidden>/.test(html));
+    const auth = await (await realFetch(`${base}/auth.js`)).text();
+    assert.ok(auth.includes("rpc('admin_usage_totals')") && auth.includes("rpc('is_admin')"));
+    assert.ok(!/from\(['"](clinical_sessions|usage_counters)['"]\)/.test(auth), 'admin não lê tabelas linha a linha');
+  });
+
+  await test('auth.js: falhas de login viram avisos legíveis e o modo local continua', async () => {
+    const vm = require('vm');
+    const src = require('fs').readFileSync(require('path').join(__dirname, 'public/auth.js'), 'utf8');
+    let replaced = null;
+    const win = {
+      navigator: { onLine: true },
+      location: { search: '?error=access_denied&error_description=User+cancelled', hash: '', href: 'http://localhost/?error=access_denied&error_description=User+cancelled', origin: 'http://localhost', pathname: '/' },
+      history: { state: null, replaceState: (_s, _t, url) => { replaced = url; } }
+    };
+    const ctx = vm.createContext({ window: win, URL, URLSearchParams, setTimeout, clearTimeout, console: { warn() {} } });
+    vm.runInContext(src, ctx);
+    const Auth = win.Auth;
+    assert.strictEqual(await Auth.init({}), false, 'sem config não liga nada');
+    assert.strictEqual(Auth.enabled, false);
+    // Com config mas sem SDK (sem document/CDN): falha contida, volta false
+    assert.strictEqual(await Auth.init({ supabaseUrl: 'https://x.supabase.co', supabaseAnonKey: 'anon' }), false);
+    const pending = Auth.takeRedirectError();
+    assert.strictEqual(pending.code, 'cancelled');
+    assert.ok(/modo local/.test(pending.message));
+    assert.strictEqual(replaced, '/', 'parâmetros de erro saem da URL');
+    assert.strictEqual(Auth.takeRedirectError(), null, 'aviso aparece uma vez só');
+    assert.strictEqual(Auth.toAuthError(new TypeError('Failed to fetch')).code, 'network');
+    assert.strictEqual(Auth.toAuthError({ message: 'Request timed out' }).code, 'timeout');
+    assert.strictEqual(Auth.toAuthError({ message: 'invalid flow state, no valid flow state found' }).code, 'exchange');
+    win.navigator.onLine = false;
+    await assert.rejects(Auth.loginWithGoogle(), (e) => e.code === 'offline' && /offline/.test(e.message));
+    await assert.rejects(Auth.adminUsageTotals(), (e) => e.code === 'config');
+    assert.strictEqual(await Auth.isAdmin(), false);
+  });
+
   globalThis.fetch = realFetch;
   server.close();
   console.log(failures ? `\n💥 ${failures} teste(s) falharam.\n` : '\n🎉 Todos os testes passaram (0 erros).\n');

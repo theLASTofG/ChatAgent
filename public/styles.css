@@ -667,3 +667,58 @@ input[type="range"] { width: 100%; accent-color: var(--text); }
 .account-email { font-size: 0.74rem; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-profile .icon-btn { width: 30px; height: 30px; }
 .account-profile .icon-btn svg { width: 16px; height: 16px; }
+
+/* ==========================================================================
+   Sprint 5 — Marca Klimbo, painel do admin e avisos de login
+   ========================================================================== */
+.sidebar-top { align-items: center; gap: 2px; }
+.brand { display: flex; align-items: center; gap: 8px; margin-right: auto; padding-left: 6px; min-width: 0; }
+.brand-mark { width: 22px; height: 22px; border-radius: 7px; box-shadow: var(--shadow-sm); flex: none; }
+.brand-name { font-size: 0.95rem; font-weight: 650; letter-spacing: -0.015em; color: var(--text); }
+.welcome h1 .brand-word { color: var(--accent); }
+:root[data-accent="neutral"] .welcome h1 .brand-word { color: inherit; }
+
+.admin-row svg { color: var(--accent); }
+.account-login.busy { opacity: 0.65; cursor: progress; }
+
+.admin-dialog { width: min(620px, 100%); }
+.admin-dialog .dialog-head { align-items: flex-start; gap: 12px; }
+.admin-dialog .dialog-head .hint { margin-top: 4px; }
+.admin-body { padding: 14px 20px 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+.metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.metric-card {
+  display: flex; flex-direction: column; gap: 6px; min-width: 0;
+  padding: 14px 16px; border-radius: var(--radius);
+  background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-sm);
+}
+.metric-label { font-size: 0.78rem; font-weight: 500; color: var(--text-2); }
+.metric-value {
+  font-size: clamp(1.5rem, 4.5vw, 1.9rem); font-weight: 650; letter-spacing: -0.02em; line-height: 1.1;
+  color: var(--text); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.metric-sub { font-size: 0.74rem; color: var(--text-3); line-height: 1.35; }
+.admin-dialog .metric-card:first-child .metric-value { color: var(--accent); }
+:root[data-accent="neutral"] .admin-dialog .metric-card:first-child .metric-value { color: var(--text); }
+#adminModal.loading .metric-value { opacity: 0.35; animation: breathe 1.4s ease-in-out infinite; }
+.admin-feedback { font-size: 0.8rem; color: var(--text-3); min-height: 1.2em; }
+.admin-feedback.warn {
+  color: var(--text); padding: 10px 12px; border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+  border-left: 3px solid var(--warn);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+}
+#refreshAdminBtn:disabled svg { animation: spin 0.9s linear infinite; }
+
+.toast-warn {
+  display: flex; align-items: flex-start; gap: 10px;
+  width: max-content; max-width: min(440px, calc(100vw - 32px));
+  padding: 11px 16px 11px 12px; border-radius: 14px;
+  background: var(--surface-elevated); color: var(--text); line-height: 1.45; cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+  border-left: 3px solid var(--warn); box-shadow: var(--shadow);
+}
+.toast-warn svg { width: 18px; height: 18px; flex: none; margin-top: 1px; color: var(--warn); }
+
+@media (max-width: 520px) {
+  .metric-grid { grid-template-columns: 1fr; }
+}

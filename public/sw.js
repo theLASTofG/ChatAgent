@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ia-respostas-v7';
+const CACHE_NAME = 'klimbo-v8';
 const ASSETS = [
   '/',
   '/index.html',

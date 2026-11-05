@@ -1,7 +1,7 @@
 {
-  "name": "IA de Respostas — Copiloto Clínico",
-  "short_name": "IA Respostas",
-  "description": "Copiloto clínico e assistente geral com modelos open-source gratuitos (Groq, OpenRouter e Gemini): notas SOAP/DAP, prontuário CFP, formulação 5Ps, memória do caso e anonimização LGPD local.",
+  "name": "Klimbo — Copiloto Clínico & Assistente",
+  "short_name": "Klimbo",
+  "description": "Klimbo: copiloto clínico e assistente geral com modelos open-source gratuitos (Groq, OpenRouter e Gemini): notas SOAP/DAP, prontuário CFP, formulação 5Ps, memória do caso e anonimização LGPD local.",
   "lang": "pt-BR",
   "start_url": "/",
   "display": "standalone",

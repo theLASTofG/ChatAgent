@@ -104,6 +104,8 @@ const el = {
   saveSettings: $('saveSettingsBtn'), feedback: $('settingsFeedback'),
   accountBox: $('accountBox'), loginBtn: $('loginBtn'), logoutBtn: $('logoutBtn'), accountProfile: $('accountProfile'),
   accountAvatar: $('accountAvatar'), accountName: $('accountName'), accountEmail: $('accountEmail'),
+  adminBtn: $('adminBtn'), adminModal: $('adminModal'), closeAdmin: $('closeAdminBtn'), refreshAdmin: $('refreshAdminBtn'),
+  adminFeedback: $('adminFeedback'), adminUpdated: $('adminUpdated'),
   exportBackupBtn: $('exportBackupBtn'), importBackupBtn: $('importBackupBtn'), importBackupInput: $('importBackupInput'), backupFeedback: $('backupFeedback'),
   groqKey: $('groqKeyInput'), orKey: $('openrouterKeyInput'), geminiKey: $('geminiKeyInput'),
   sysPrompt: $('systemPromptInput'), backendUrl: $('backendUrlInput'),
@@ -472,7 +474,9 @@ function exportBar() {
 // ---------------------------------------------------------------------------
 // Backup e restauração (JSON local)
 // ---------------------------------------------------------------------------
-const BACKUP_KIND = 'ia-respostas-backup';
+const BRAND_TITLE = 'Klimbo — Copiloto Clínico & Assistente';
+const BACKUP_KIND = 'klimbo-backup';
+const BACKUP_KINDS = new Set([BACKUP_KIND, 'ia-respostas-backup']); // aceita backups de antes do rebranding
 
 function exportBackup() {
   saveThreads();
@@ -492,7 +496,7 @@ function validThread(t) {
 async function importBackup(file) {
   let data;
   try { data = JSON.parse(await file.text()); } catch { return setBackupFeedback('Arquivo inválido: não é um JSON'); }
-  if (!data || data.kind !== BACKUP_KIND || !Array.isArray(data.threads)) return setBackupFeedback('Arquivo não é um backup do IA de Respostas');
+  if (!data || !BACKUP_KINDS.has(data.kind) || !Array.isArray(data.threads)) return setBackupFeedback('Arquivo não é um backup do Klimbo');
   const incoming = data.threads.filter(validThread);
   const byId = new Map(threads.map((t) => [t.id, t]));
   let added = 0, updated = 0;
@@ -705,7 +709,7 @@ function renderMessages() {
 
 function renderAll() {
   const t = activeThread();
-  document.title = t && t.messages.length ? `${t.title} · IA de Respostas` : 'IA de Respostas';
+  document.title = t && t.messages.length ? `${t.title} · Klimbo` : BRAND_TITLE;
   renderPersonas();
   renderWorkspace();
   renderThreadList();
@@ -976,14 +980,25 @@ function scrollToBottom(force) {
   if (force || nearBottom) c.scrollTop = c.scrollHeight;
 }
 
-function toast(text) {
+// tone: 'info' (padrão, some em 2 s) ou 'warn' (paleta de aviso, fica mais tempo e é lido por leitores de tela)
+function toast(text, { tone = 'info', duration } = {}) {
   document.querySelectorAll('.toast').forEach((n) => n.remove());
   const n = document.createElement('div');
-  n.className = 'toast';
-  n.textContent = text;
+  n.className = tone === 'warn' ? 'toast toast-warn' : 'toast';
+  n.setAttribute('role', tone === 'warn' ? 'alert' : 'status');
+  if (tone === 'warn') {
+    n.insertAdjacentHTML('afterbegin', ICON.alert);
+    const span = document.createElement('span');
+    span.textContent = text;
+    n.appendChild(span);
+    n.addEventListener('click', () => n.remove());
+  } else {
+    n.textContent = text;
+  }
   document.body.appendChild(n);
-  setTimeout(() => n.remove(), 2000);
+  setTimeout(() => n.remove(), duration ?? (tone === 'warn' ? 6000 : 2000));
 }
+
 
 // ===========================================================================
 // Envio + Streaming SSE
@@ -1271,17 +1286,107 @@ async function loadStatus() {
 let accountWired = false;
 async function initAccount() {
   if (!window.Auth || !serverStatus?.auth?.enabled) return;
-  if (!(await window.Auth.init(serverStatus.auth))) return;
+  // O botão aparece mesmo se o SDK falhar (ex.: offline): o clique tenta de novo e explica o motivo
   el.accountBox.hidden = false;
-  if (accountWired) return;
-  accountWired = true;
-  window.Auth.onAuthStateChange(renderAccount);
+  if (!accountWired) {
+    accountWired = true;
+    window.Auth.onAuthStateChange(renderAccount);
+  }
+  await window.Auth.init(serverStatus.auth);
+  const pending = window.Auth.takeRedirectError?.();
+  if (pending) toast(pending.message, { tone: 'warn', duration: 8000 });
 }
+
+// Login Google: nunca trava a interface nem mexe nos dados locais
+let loginGuard = null;
+function setLoginBusy(busyNow) {
+  el.loginBtn.disabled = busyNow;
+  el.loginBtn.classList.toggle('busy', busyNow);
+  el.loginBtn.querySelector('span').textContent = busyNow ? 'Abrindo o Google…' : 'Entrar com Google';
+}
+async function startGoogleLogin() {
+  if (!window.Auth || el.loginBtn.disabled) return;
+  setLoginBusy(true);
+  clearTimeout(loginGuard);
+  // Se o navegador não sair da página (bloqueio, aba presa), devolve o botão
+  loginGuard = setTimeout(() => setLoginBusy(false), 20000);
+  try {
+    await window.Auth.loginWithGoogle();
+  } catch (err) {
+    clearTimeout(loginGuard);
+    setLoginBusy(false);
+    toast(err?.message || 'Não foi possível entrar agora. Você continua no modo local.', { tone: 'warn' });
+  }
+}
+// Voltou para a página pelo botão "voltar" do navegador sem concluir o login
+window.addEventListener('pageshow', (e) => { if (e.persisted) { clearTimeout(loginGuard); setLoginBusy(false); } });
+
+// ===========================================================================
+// Painel do admin (métricas agregadas). O botão é só conveniência visual:
+// quem decide é o banco (is_admin() + admin_usage_totals() com security definer).
+// ===========================================================================
+let adminCheck = 0;
+async function refreshAdminAccess() {
+  const ticket = ++adminCheck;
+  const user = window.Auth?.currentUser();
+  const admin = user ? await window.Auth.isAdmin() : false;
+  if (ticket !== adminCheck) return; // resposta atrasada de outra sessão
+  el.adminBtn.hidden = !admin;
+  if (!admin) closeAdmin();
+}
+
+const fmtInt = new Intl.NumberFormat('pt-BR');
+const fmtCompact = new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 });
+function setMetric(key, value, sub) {
+  const v = el.adminModal.querySelector(`[data-metric="${key}"]`);
+  if (v) { v.textContent = value; v.title = value; }
+  const s = el.adminModal.querySelector(`[data-metric-sub="${key}"]`);
+  if (s && sub !== undefined) s.textContent = sub;
+}
+
+function openAdmin() {
+  if (el.adminBtn.hidden) return;
+  closeSettings();
+  closeDrawer();
+  el.adminModal.hidden = false;
+  loadAdminMetrics();
+}
+function closeAdmin() { el.adminModal.hidden = true; }
+
+let adminLoading = false;
+async function loadAdminMetrics() {
+  if (adminLoading || !window.Auth) return;
+  adminLoading = true;
+  el.adminModal.classList.add('loading');
+  el.refreshAdmin.disabled = true;
+  el.adminFeedback.textContent = '';
+  el.adminFeedback.className = 'admin-feedback';
+  try {
+    const m = await window.Auth.adminUsageTotals();
+    setMetric('totalUsers', fmtInt.format(m.totalUsers), `${fmtInt.format(m.activeLast7d)} ativos em 7 dias · ${fmtInt.format(m.activeLast30d)} em 30`);
+    setMetric('totalChats', fmtInt.format(m.totalChats), m.totalUsers ? `≈ ${fmtInt.format(Math.round(m.totalChats / m.totalUsers))} por profissional` : ' ');
+    setMetric('clinicalNotes', fmtInt.format(m.clinicalNotes));
+    setMetric('tokensEstimated', m.tokensEstimated >= 10000 ? fmtCompact.format(m.tokensEstimated) : fmtInt.format(m.tokensEstimated));
+    el.adminModal.querySelector('[data-metric="tokensEstimated"]').title = `${fmtInt.format(m.tokensEstimated)} tokens`;
+    el.adminFeedback.textContent = `${fmtInt.format(m.backedUpSessions)} sessões com backup cifrado na nuvem.`;
+    el.adminUpdated.textContent = `Atualizado às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+  } catch (err) {
+    el.adminFeedback.className = 'admin-feedback warn';
+    el.adminFeedback.textContent = err?.message || 'Não foi possível carregar as métricas.';
+    if (err?.code === 'forbidden') { el.adminBtn.hidden = true; setTimeout(closeAdmin, 2500); }
+  } finally {
+    adminLoading = false;
+    el.adminModal.classList.remove('loading');
+    el.refreshAdmin.disabled = false;
+  }
+}
+
 
 function renderAccount() {
   const user = window.Auth?.currentUser();
   el.loginBtn.hidden = Boolean(user);
   el.accountProfile.hidden = !user;
+  refreshAdminAccess();
   if (!user) return;
   const initials = String(user.name || user.email || '?').trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
   el.accountAvatar.textContent = initials || '?';
@@ -1440,12 +1545,14 @@ el.closeSettings.addEventListener('click', closeSettings);
 el.modal.addEventListener('click', (e) => { if (e.target === el.modal) closeSettings(); });
 el.saveSettings.addEventListener('click', saveSettings);
 el.exportBackupBtn.addEventListener('click', exportBackup);
-el.loginBtn.addEventListener('click', () => {
-  window.Auth?.loginWithGoogle().catch((err) => toast(err.message || 'Não foi possível entrar'));
-});
+el.loginBtn.addEventListener('click', startGoogleLogin);
 el.logoutBtn.addEventListener('click', () => {
-  window.Auth?.logout().then(() => toast('Você saiu. Os dados locais continuam neste aparelho.'), () => toast('Não foi possível sair'));
+  window.Auth?.logout().then(() => toast('Você saiu. Os dados locais continuam neste aparelho.'), () => toast('Não foi possível sair', { tone: 'warn' }));
 });
+el.adminBtn.addEventListener('click', openAdmin);
+el.closeAdmin.addEventListener('click', closeAdmin);
+el.refreshAdmin.addEventListener('click', loadAdminMetrics);
+el.adminModal.addEventListener('click', (e) => { if (e.target === el.adminModal) closeAdmin(); });
 el.importBackupBtn.addEventListener('click', () => el.importBackupInput.click());
 el.importBackupInput.addEventListener('change', () => {
   const f = el.importBackupInput.files[0];
@@ -1497,7 +1604,7 @@ el.list.addEventListener('click', (e) => {
 });
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { closeSettings(); closeDrawer(); togglePersonaMenu(false); if (dictation) stopDictation(); }
+  if (e.key === 'Escape') { closeSettings(); closeAdmin(); closeDrawer(); togglePersonaMenu(false); if (dictation) stopDictation(); }
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'o') { e.preventDefault(); newChat(); }
 });
 
@@ -1519,9 +1626,11 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') return markSeen();
   if (maybeStartFresh({ onResume: true })) {
     closeSettings();
+    closeAdmin();
     renderAll();
     toast('Conversa nova. A anterior está no histórico.');
   }
   markSeen();
 });
 window.addEventListener('pagehide', markSeen);
+window.addEventListener('online', () => { if (serverStatus?.auth?.enabled && !window.Auth?.enabled) initAccount(); });

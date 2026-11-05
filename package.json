@@ -1,7 +1,7 @@
 {
-  "name": "projeto-ia-respostas",
+  "name": "klimbo",
   "version": "1.0.0",
-  "description": "IA de Respostas Open-Source (Groq API) com foco em custo zero e escala para Android (PWA / Capacitor)",
+  "description": "Klimbo — copiloto clínico e assistente geral open-source, custo zero (Groq, OpenRouter e Gemini), web e Android (PWA / Capacitor)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
